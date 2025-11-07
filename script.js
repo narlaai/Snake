@@ -11,6 +11,7 @@
     const overlayTitle = document.getElementById('overlay-title');
     const overlayTip = document.getElementById('overlay-tip');
     const overlayRestart = document.getElementById('overlay-restart');
+    const overlayStart = document.getElementById('overlay-start');
     // 新控件
     const cellsSelect = document.getElementById('cells-select');
     const boundarySelect = document.getElementById('boundary-select');
@@ -429,6 +430,14 @@
     btnPause.addEventListener('click', togglePause);
     btnRestart.addEventListener('click', restart);
     overlayRestart.addEventListener('click', restart);
+    if (overlayStart) overlayStart.addEventListener('click', () => { if (!isRunning) start(); });
+    // 点击画布/遮罩任意处也可开始
+    canvas.addEventListener('click', () => { if (!isRunning && !isGameOver) start(); });
+    document.getElementById('overlay').addEventListener('click', (e) => {
+        // 避免点击按钮重复触发
+        if (e.target.id === 'overlay-start' || e.target.id === 'overlay-restart') return;
+        if (!isRunning) start();
+    });
 
     // 主题与音效控件
     themeSelect.value = currentTheme;
