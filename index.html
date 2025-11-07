@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>贪吃蛇</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="container">
+        <header class="topbar">
+            <div class="title">贪吃蛇</div>
+            <div class="stats">
+                <span>分数：<strong id="score">0</strong></span>
+                <span class="sep">|</span>
+                <span>速度：<strong id="speed">1x</strong></span>
+                <span class="sep">|</span>
+                <label for="theme-select">主题：</label>
+                <select id="theme-select" class="select">
+                    <option value="dark">深色</option>
+                    <option value="light">浅色</option>
+                    <option value="neon">霓虹</option>
+                </select>
+                <span class="sep">|</span>
+                <button id="btn-sound" class="btn" aria-pressed="true">音效：开</button>
+                <span class="sep">|</span>
+                <button id="btn-pause" class="btn">暂停</button>
+                <button id="btn-restart" class="btn">重开</button>
+            </div>
+        </header>
+
+        <section class="toolbar">
+            <div class="row">
+                <label for="cells-select">网格：</label>
+                <select id="cells-select" class="select">
+                    <option value="16">16×16</option>
+                    <option value="20">20×20</option>
+                    <option value="24" selected>24×24</option>
+                    <option value="30">30×30</option>
+                </select>
+                <span class="sep">|</span>
+                <label for="boundary-select">边界：</label>
+                <select id="boundary-select" class="select">
+                    <option value="normal" selected>正常</option>
+                    <option value="wrap">穿墙</option>
+                    <option value="bounce">反弹</option>
+                </select>
+                <span class="sep">|</span>
+                <label for="mode-select">模式：</label>
+                <select id="mode-select" class="select">
+                    <option value="classic" selected>经典</option>
+                    <option value="time">时间挑战</option>
+                    <option value="endless">无尽加速</option>
+                </select>
+                <span class="sep">|</span>
+                <label for="skin-select">皮肤：</label>
+                <select id="skin-select" class="select">
+                    <option value="emerald" selected>翡翠</option>
+                    <option value="cyan">青蓝</option>
+                    <option value="amber">琥珀</option>
+                    <option value="violet">紫罗兰</option>
+                </select>
+            </div>
+        </section>
+
+        <main class="stage-wrap">
+            <canvas id="game" width="480" height="480"></canvas>
+            <div id="overlay" class="overlay hidden">
+                <div class="overlay-content">
+                    <div id="overlay-title" class="overlay-title">按任意方向键开始</div>
+                    <div id="overlay-tip" class="overlay-tip">W/A/S/D 或 方向键移动 · P 暂停/继续</div>
+                    <button id="overlay-restart" class="btn primary hidden">重新开始</button>
+                </div>
+            </div>
+        </main>
+
+        <section class="meta">
+            <div class="highscores">
+                <div class="meta-title">最高分</div>
+                <ul id="hiscore-list" class="hiscore-list"></ul>
+            </div>
+            <div class="save">
+                <button id="btn-continue" class="btn">继续上次</button>
+                <button id="btn-save" class="btn">手动存档</button>
+                <button id="btn-clear-save" class="btn">清除存档</button>
+            </div>
+        </section>
+
+        <footer class="mobile-controls">
+            <div class="pad">
+                <button class="pad-btn" data-dir="up">▲</button>
+                <div class="pad-mid">
+                    <button class="pad-btn" data-dir="left">◀</button>
+                    <button class="pad-btn" data-dir="down">▼</button>
+                    <button class="pad-btn" data-dir="right">▶</button>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
+
