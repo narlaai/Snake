@@ -1,1326 +1,785 @@
-// (() => {
-//     const canvas = document.getElementById('game');
-//     const ctx = canvas.getContext('2d');
-//     const scoreEl = document.getElementById('score');
-//     const speedEl = document.getElementById('speed');
-//     const btnPause = document.getElementById('btn-pause');
-//     const btnRestart = document.getElementById('btn-restart');
-//     const themeSelect = document.getElementById('theme-select');
-//     const btnSound = document.getElementById('btn-sound');
-//     const overlay = document.getElementById('overlay');
-//     const overlayTitle = document.getElementById('overlay-title');
-//     const overlayTip = document.getElementById('overlay-tip');
-//     const overlayRestart = document.getElementById('overlay-restart');
-//     const overlayStart = document.getElementById('overlay-start');
-//     // const overlayStart = document.getElementById('overlay-start');
-//     // 新控件
-//     const cellsSelect = document.getElementById('cells-select');
-//     const boundarySelect = document.getElementById('boundary-select');
-//     const modeSelect = document.getElementById('mode-select');
-//     const skinSelect = document.getElementById('skin-select');
-//     const btnContinue = document.getElementById('btn-continue');
-//     const btnSave = document.getElementById('btn-save');
-//     const btnClearSave = document.getElementById('btn-clear-save');
-//     const hiscoreList = document.getElementById('hiscore-list');
-
-//     // 基础配置
-//     let gridSize = 24; // 单元格像素（会根据cells变化）
-//     let cells = 24; // 方阵边长，可变
-//     const baseTickMs = 140; // 初始tick
-//     const minTickMs = 60;   // 最快速度
-
-//     // 状态
-//     let snake = [];
-//     let direction = { x: 1, y: 0 }; // 初始向右
-//     let nextDirQueue = [];
-//     let food = null;
-//     let score = 0;
-//     let tickMs = baseTickMs;
-//     let isRunning = false;
-//     let isGameOver = false;
-//     let lastTickAt = 0;
-//     let boundaryMode = localStorage.getItem('snake.boundary') || 'normal'; // normal | wrap | bounce
-//     let gameMode = localStorage.getItem('snake.mode') || 'classic'; // classic | time | endless
-//     let skin = localStorage.getItem('snake.skin') || 'emerald';
-//     let timeLeftMs = 60000; // 时间挑战默认60s
-//     let obstacles = []; // {x,y}
-//     let foodsEaten = 0; // 逐关计数
-
-//     // 主题与调色板
-//     let currentTheme = localStorage.getItem('snake.theme') || 'dark';
-//     let palette = {
-//         boardA: '#0b1227',
-//         boardB: '#0a1023',
-//         snakeHead: '#34d399',
-//         snakeBody: '#10b981',
-//         food: '#f87171',
-//         foodStroke: 'rgba(0,0,0,.35)'
-//     };
-
-//     function applyTheme(theme) {
-//         currentTheme = theme;
-//         document.body.classList.remove('theme-light', 'theme-neon');
-//         if (theme === 'light') document.body.classList.add('theme-light');
-//         if (theme === 'neon') document.body.classList.add('theme-neon');
-//         localStorage.setItem('snake.theme', theme);
-//         loadPalette();
-//     }
-
-//     function loadPalette() {
-//         const cs = getComputedStyle(document.body.classList.contains('theme-light') || document.body.classList.contains('theme-neon') ? document.body : document.documentElement);
-//         palette.boardA = cs.getPropertyValue('--board-a').trim() || palette.boardA;
-//         palette.boardB = cs.getPropertyValue('--board-b').trim() || palette.boardB;
-//         palette.snakeHead = cs.getPropertyValue('--snake-head').trim() || palette.snakeHead;
-//         palette.snakeBody = cs.getPropertyValue('--snake-body').trim() || palette.snakeBody;
-//         palette.food = cs.getPropertyValue('--food').trim() || palette.food;
-//         palette.foodStroke = cs.getPropertyValue('--food-stroke').trim() || palette.foodStroke;
-//         draw();
-//     }
-
-//     // 音效
-//     const audio = {
-//         ctx: null,
-//         enabled: localStorage.getItem('snake.sound') !== 'off',
-//         ensure() {
-//             if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-//         },
-//         play(freq = 440, duration = 0.1, type = 'sine', volume = 0.15) {
-//             if (!this.enabled) return;
-//             this.ensure();
-//             const now = this.ctx.currentTime;
-//             const osc = this.ctx.createOscillator();
-//             const gain = this.ctx.createGain();
-//             osc.type = type;
-//             osc.frequency.setValueAtTime(freq, now);
-//             gain.gain.setValueAtTime(volume, now);
-//             gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-//             osc.connect(gain);
-//             gain.connect(this.ctx.destination);
-//             osc.start(now);
-//             osc.stop(now + duration);
-//         },
-//         eat() { this.play(660, 0.09, 'triangle', 0.18); },
-//         over() {
-//             this.ensure();
-//             // 两个递降音
-//             this.play(300, 0.18, 'sawtooth', 0.15);
-//             setTimeout(() => this.play(180, 0.22, 'sawtooth', 0.15), 160);
-//         }
-//     };
-
-//     function initGame() {
-//         snake = [
-//             { x: 8, y: 10 },
-//             { x: 7, y: 10 },
-//             { x: 6, y: 10 }
-//         ];
-//         direction = { x: 1, y: 0 };
-//         nextDirQueue = [];
-//         score = 0;
-//         tickMs = baseTickMs;
-//         isRunning = false;
-//         isGameOver = false;
-//         foodsEaten = 0;
-//         obstacles = [];
-//         placeFood();
-//         updateHUD();
-//         const tip = `W/A/S/D 或 方向键移动 · P 暂停/继续${gameMode === 'time' ? ' · 时间挑战' : ''}`;
-//         showOverlay(true, '按任意方向键开始', tip, false);
-//         draw();
-//     }
-
-//     function updateHUD() {
-//         scoreEl.textContent = String(score);
-//         const speedFactor = (baseTickMs / tickMs).toFixed(1);
-//         speedEl.textContent = speedFactor + 'x';
-//         btnPause.textContent = isRunning ? '暂停' : '继续';
-//     }
-
-//     function showOverlay(show, title = '', tip = '', showRestart = false) {
-//         overlay.classList.toggle('hidden', !show);
-//         overlayTitle.textContent = title;
-//         overlayTip.textContent = tip;
-//         overlayRestart.classList.toggle('hidden', !showRestart);
-//     }
-
-//     function placeFood() {
-//         while (true) {
-//             const x = Math.floor(Math.random() * cells);
-//             const y = Math.floor(Math.random() * cells);
-//             const onSnake = snake.some(seg => seg.x === x && seg.y === y);
-//             const onObstacle = obstacles.some(o => o.x === x && o.y === y);
-//             if (!onSnake && !onObstacle) { food = { x, y }; return; }
-//         }
-//     }
-
-//     function enqueueDir(nx, ny) {
-//         const last = nextDirQueue.length ? nextDirQueue[nextDirQueue.length - 1] : direction;
-//         if (last.x === -nx && last.y === -ny) return; // 禁止反向
-//         nextDirQueue.push({ x: nx, y: ny });
-//     }
-
-//     function handleKey(e) {
-//         const k = e.key.toLowerCase();
-//         if (k === 'arrowup' || k === 'w') enqueueDir(0, -1);
-//         else if (k === 'arrowdown' || k === 's') enqueueDir(0, 1);
-//         else if (k === 'arrowleft' || k === 'a') enqueueDir(-1, 0);
-//         else if (k === 'arrowright' || k === 'd') enqueueDir(1, 0);
-//         else if (k === 'p') togglePause();
-
-//         if (!isRunning && !isGameOver && (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k))) {
-//             start();
-//         }
-//     }
-
-//     function handlePadClick(e) {
-//         const dir = e.target.getAttribute('data-dir');
-//         if (!dir) return;
-//         if (dir === 'up') enqueueDir(0, -1);
-//         if (dir === 'down') enqueueDir(0, 1);
-//         if (dir === 'left') enqueueDir(-1, 0);
-//         if (dir === 'right') enqueueDir(1, 0);
-//         if (!isRunning && !isGameOver) start();
-//     }
-
-//     function start() {
-//         isRunning = true;
-//         showOverlay(false);
-//         updateHUD();
-//         draw();
-//     }
-
-//     function togglePause() {
-//         if (isGameOver) return;
-//         isRunning = !isRunning;
-//         if (!isRunning) {
-//             showOverlay(true, '已暂停', '按 P 或方向键继续', false);
-//         } else {
-//             showOverlay(false);
-//         }
-//         updateHUD();
-//     }
-
-//     function restart() {
-//         initGame();
-//     }
-
-//     function step() {
-//         // 应用排队方向（每tick最多一次）
-//         if (nextDirQueue.length) {
-//             const nd = nextDirQueue.shift();
-//             if (!(direction.x === -nd.x && direction.y === -nd.y)) {
-//                 direction = nd;
-//             }
-//         }
-
-//         const head = snake[0];
-//         let newHead = { x: head.x + direction.x, y: head.y + direction.y };
-
-//         // 边界模式
-//         if (boundaryMode === 'normal') {
-//             if (newHead.x < 0 || newHead.x >= cells || newHead.y < 0 || newHead.y >= cells) {
-//                 return gameOver(true);
-//             }
-//         } else if (boundaryMode === 'wrap') {
-//             if (newHead.x < 0) newHead.x = cells - 1;
-//             if (newHead.x >= cells) newHead.x = 0;
-//             if (newHead.y < 0) newHead.y = cells - 1;
-//             if (newHead.y >= cells) newHead.y = 0;
-//         } else if (boundaryMode === 'bounce') {
-//             if (newHead.x < 0 || newHead.x >= cells) {
-//                 direction.x = -direction.x; newHead = { x: head.x + direction.x, y: head.y + direction.y };
-//             }
-//             if (newHead.y < 0 || newHead.y >= cells) {
-//                 direction.y = -direction.y; newHead = { x: head.x + direction.x, y: head.y + direction.y };
-//             }
-//         }
-//         // 撞自己或障碍
-//         if (snake.some((seg, idx) => idx !== 0 && seg.x === newHead.x && seg.y === newHead.y)) {
-//             return gameOver(true);
-//         }
-//         if (obstacles.some(o => o.x === newHead.x && o.y === newHead.y)) {
-//             return gameOver(true);
-//         }
-
-//         // 移动
-//         snake.unshift(newHead);
-//         if (food && newHead.x === food.x && newHead.y === food.y) {
-//             score += 10;
-//             // 提速：每吃一次缩短 5ms，直到最小
-//             tickMs = Math.max(minTickMs, tickMs - 5);
-//             placeFood();
-//             updateHUD();
-//             audio.eat();
-//             foodsEaten++;
-//             // 逐关难度：每吃3个生成一个障碍
-//             if (foodsEaten % 3 === 0) addObstacle();
-//         } else {
-//             snake.pop();
-//         }
-//     }
-
-//     function gameOver(hit = false) {
-//         isRunning = false;
-//         isGameOver = true;
-//         showOverlay(true, '游戏结束', `你的分数：${score}`, true);
-//         audio.over();
-//         if (hit) screenShake(8, 300);
-//         submitHiscore();
-//     }
-
-//     function drawCell(x, y, color) {
-//         const px = x * gridSize;
-//         const py = y * gridSize;
-//         ctx.fillStyle = color;
-//         ctx.fillRect(px, py, gridSize, gridSize);
-//     }
-
-//     function drawBoard() {
-//         // 背景棋盘淡格
-//         ctx.clearRect(0, 0, canvas.width, canvas.height);
-//         for (let y = 0; y < cells; y++) {
-//             for (let x = 0; x < cells; x++) {
-//                 const even = ((x + y) % 2) === 0;
-//                 ctx.fillStyle = even ? palette.boardA : palette.boardB;
-//                 ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-//             }
-//         }
-//     }
-
-//     function drawSnake() {
-//         // 头部
-//         const head = snake[0];
-//         drawCell(head.x, head.y, palette.snakeHead);
-//         // 身体
-//         for (let i = 1; i < snake.length; i++) {
-//             drawCell(snake[i].x, snake[i].y, palette.snakeBody);
-//         }
-//     }
-
-//     function drawFood() {
-//         if (!food) return;
-//         // 食物加个边
-//         const x = food.x * gridSize;
-//         const y = food.y * gridSize;
-//         const r = 6;
-//         ctx.fillStyle = palette.food;
-//         ctx.fillRect(x + 4, y + 4, gridSize - 8, gridSize - 8);
-//         ctx.strokeStyle = palette.foodStroke;
-//         ctx.lineWidth = 2;
-//         ctx.strokeRect(x + 4, y + 4, gridSize - 8, gridSize - 8);
-//         // 小高光
-//         ctx.fillStyle = 'rgba(255,255,255,.15)';
-//         ctx.beginPath();
-//         ctx.arc(x + gridSize - 10, y + 8, r, 0, Math.PI * 2);
-//         ctx.fill();
-//     }
-
-//     function drawObstacles() {
-//         if (!obstacles.length) return;
-//         ctx.fillStyle = 'rgba(148,163,184,.8)';
-//         obstacles.forEach(o => {
-//             ctx.fillRect(o.x * gridSize + 2, o.y * gridSize + 2, gridSize - 4, gridSize - 4);
-//         });
-//     }
-
-//     function draw() {
-//         drawBoard();
-//         drawSnake();
-//         drawFood();
-//         drawObstacles();
-//         renderParticles();
-//     }
-
-//     function loop(timestamp) {
-//         requestAnimationFrame(loop);
-//         if (!isRunning || isGameOver) return;
-//         if (timestamp - lastTickAt >= tickMs) {
-//             lastTickAt = timestamp;
-//             step();
-//             draw();
-//         }
-//         if (gameMode === 'time' && isRunning) {
-//             timeLeftMs = Math.max(0, timeLeftMs - 16.7);
-//             if (timeLeftMs <= 0) {
-//                 return gameOver(false);
-//             }
-//         }
-//         updateParticles(16.7);
-//     }
-
-//     function setCells(n) {
-//         cells = n;
-//         gridSize = Math.floor(canvas.width / cells);
-//         // 居中留边
-//         draw();
-//     }
-
-//     function addObstacle() {
-//         // 简单随机放置
-//         for (let i = 0; i < 50; i++) {
-//             const x = Math.floor(Math.random() * cells);
-//             const y = Math.floor(Math.random() * cells);
-//             const conflict = snake.some(s => s.x === x && s.y === y) || (food && food.x === x && food.y === y) || obstacles.some(o => o.x === x && o.y === y);
-//             if (!conflict) { obstacles.push({ x, y }); return; }
-//         }
-//     }
-
-//     // 粒子与屏幕震动
-//     const particles = [];
-//     function spawnParticles(x, y, color) {
-//         for (let i = 0; i < 10; i++) {
-//             particles.push({
-//                 x: x * gridSize + gridSize / 2,
-//                 y: y * gridSize + gridSize / 2,
-//                 vx: (Math.random() - 0.5) * 120,
-//                 vy: (Math.random() - 0.5) * 120,
-//                 life: 300,
-//                 color
-//             });
-//         }
-//     }
-//     function updateParticles(dt) {
-//         for (let i = particles.length - 1; i >= 0; i--) {
-//             const p = particles[i];
-//             p.x += p.vx * (dt / 1000);
-//             p.y += p.vy * (dt / 1000);
-//             p.vx *= 0.98; p.vy *= 0.98;
-//             p.life -= dt;
-//             if (p.life <= 0) particles.splice(i, 1);
-//         }
-//     }
-//     function renderParticles() {
-//         particles.forEach(p => {
-//             ctx.fillStyle = p.color;
-//             ctx.globalAlpha = Math.max(0, p.life / 300);
-//             ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
-//             ctx.globalAlpha = 1;
-//         });
-//     }
-//     let shakeUntil = 0; let shakeMag = 0;
-//     function screenShake(mag = 6, duration = 250) {
-//         shakeMag = mag; shakeUntil = performance.now() + duration;
-//     }
-//     const _origDraw = draw;
-//     // wrap draw with shake
-//     draw = function() {
-//         const now = performance.now();
-//         if (now < shakeUntil) {
-//             const ox = (Math.random() - 0.5) * shakeMag;
-//             const oy = (Math.random() - 0.5) * shakeMag;
-//             ctx.save();
-//             ctx.translate(ox, oy);
-//             drawBoard();
-//             drawSnake();
-//             drawFood();
-//             drawObstacles();
-//             renderParticles();
-//             ctx.restore();
-//         } else {
-//             // fallback
-//             drawBoard();
-//             drawSnake();
-//             drawFood();
-//             drawObstacles();
-//             renderParticles();
-//         }
-//     }
-
-//     // 事件绑定
-//     window.addEventListener('keydown', handleKey);
-//     document.querySelector('.mobile-controls').addEventListener('click', handlePadClick);
-//     btnPause.addEventListener('click', togglePause);
-//     btnRestart.addEventListener('click', restart);
-//     overlayRestart.addEventListener('click', restart);
-//     if (overlayStart) overlayStart.addEventListener('click', () => { if (!isRunning && !isGameOver) start(); });
-//     // 点击画布/遮罩任意处也可开始
-//     canvas.addEventListener('click', () => { if (!isRunning && !isGameOver) start(); });
-//     document.getElementById('overlay').addEventListener('click', (e) => {
-//         // 避免点击按钮重复触发
-//         if (e.target.id === 'overlay-start' || e.target.id === 'overlay-restart') return;
-//         if (!isRunning) start();
-//     });
-
-//     // 主题与音效控件
-//     themeSelect.value = currentTheme;
-//     themeSelect.addEventListener('change', (e) => {
-//         applyTheme(e.target.value);
-//     });
-//     function refreshSoundButton() {
-//         btnSound.textContent = '音效：' + (audio.enabled ? '开' : '关');
-//         btnSound.setAttribute('aria-pressed', String(audio.enabled));
-//     }
-//     btnSound.addEventListener('click', () => {
-//         audio.enabled = !audio.enabled;
-//         localStorage.setItem('snake.sound', audio.enabled ? 'on' : 'off');
-//         refreshSoundButton();
-//         if (audio.enabled) audio.play(880, 0.06, 'square', 0.1);
-//     });
-
-//     // 设置控件事件
-//     function applySkin(name) {
-//         skin = name; localStorage.setItem('snake.skin', skin);
-//         // 映射到调色板
-//         if (skin === 'emerald') { palette.snakeHead = '#34d399'; palette.snakeBody = '#10b981'; }
-//         if (skin === 'cyan') { palette.snakeHead = '#22d3ee'; palette.snakeBody = '#06b6d4'; }
-//         if (skin === 'amber') { palette.snakeHead = '#f59e0b'; palette.snakeBody = '#fbbf24'; }
-//         if (skin === 'violet') { palette.snakeHead = '#a78bfa'; palette.snakeBody = '#8b5cf6'; }
-//         draw();
-//     }
-//     cellsSelect.value = String(localStorage.getItem('snake.cells') || cells);
-//     boundarySelect.value = boundaryMode;
-//     modeSelect.value = gameMode;
-//     skinSelect.value = skin;
-//     cells = parseInt(cellsSelect.value, 10) || 24; setCells(cells);
-//     cellsSelect.addEventListener('change', (e) => {
-//         const n = parseInt(e.target.value, 10);
-//         localStorage.setItem('snake.cells', String(n));
-//         setCells(n);
-//         restart();
-//     });
-//     boundarySelect.addEventListener('change', (e) => {
-//         boundaryMode = e.target.value; localStorage.setItem('snake.boundary', boundaryMode);
-//         restart();
-//     });
-//     modeSelect.addEventListener('change', (e) => {
-//         gameMode = e.target.value; localStorage.setItem('snake.mode', gameMode);
-//         timeLeftMs = 60000; restart();
-//     });
-//     skinSelect.addEventListener('change', (e) => applySkin(e.target.value));
-//     applySkin(skin);
-
-//     // 最高分
-//     function loadHiscores() {
-//         const key = 'snake.hiscores.' + gameMode;
-//         let list = [];
-//         try { list = JSON.parse(localStorage.getItem(key) || '[]'); } catch {}
-//         return list;
-//     }
-//     function saveHiscores(list) {
-//         const key = 'snake.hiscores.' + gameMode;
-//         localStorage.setItem(key, JSON.stringify(list.slice(0, 5)));
-//     }
-//     function submitHiscore() {
-//         const list = loadHiscores();
-//         list.push({ score, date: Date.now(), cells, boundaryMode, skin });
-//         list.sort((a, b) => b.score - a.score);
-//         saveHiscores(list);
-//         renderHiscores();
-//     }
-//     function renderHiscores() {
-//         const list = loadHiscores();
-//         hiscoreList.innerHTML = '';
-//         list.slice(0, 5).forEach((h, i) => {
-//             const li = document.createElement('li');
-//             const d = new Date(h.date).toLocaleDateString();
-//             li.textContent = `#${i+1} ${h.score}分 (${d})`;
-//             hiscoreList.appendChild(li);
-//         });
-//     }
-//     renderHiscores();
-
-//     // 存档/读档
-//     function serializeState() {
-//         return JSON.stringify({ snake, direction, food, score, tickMs, isRunning: false, isGameOver: false, cells, boundaryMode, gameMode, skin, timeLeftMs, obstacles, foodsEaten });
-//     }
-//     function deserializeState(s) {
-//         try { return JSON.parse(s); } catch { return null; }
-//     }
-//     function saveState() {
-//         localStorage.setItem('snake.save', serializeState());
-//     }
-//     function loadState() {
-//         const s = localStorage.getItem('snake.save');
-//         if (!s) return false;
-//         const st = deserializeState(s);
-//         if (!st) return false;
-//         snake = st.snake; direction = st.direction; food = st.food; score = st.score; tickMs = st.tickMs;
-//         isRunning = false; isGameOver = false; cells = st.cells || cells; boundaryMode = st.boundaryMode || boundaryMode; gameMode = st.gameMode || gameMode; skin = st.skin || skin; timeLeftMs = st.timeLeftMs || timeLeftMs; obstacles = st.obstacles || []; foodsEaten = st.foodsEaten || 0;
-//         setCells(cells); applySkin(skin); updateHUD(); draw();
-//         showOverlay(true, '已加载存档', '按任意方向键继续', false);
-//         return true;
-//     }
-//     btnSave.addEventListener('click', () => { saveState(); audio.play(880, 0.06, 'square', 0.1); });
-//     btnContinue.addEventListener('click', () => { if (!loadState()) { overlayTitle.textContent = '没有可用的存档'; overlay.classList.remove('hidden'); } });
-//     btnClearSave.addEventListener('click', () => { localStorage.removeItem('snake.save'); renderHiscores(); });
-//     window.addEventListener('beforeunload', () => { try { saveState(); } catch {} });
-
-//     // 手势滑动控制
-//     let touchStart = null;
-//     canvas.addEventListener('touchstart', (e) => {
-//         const t = e.changedTouches[0]; touchStart = { x: t.clientX, y: t.clientY, t: performance.now() };
-//     }, { passive: true });
-//     canvas.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
-//     canvas.addEventListener('touchend', (e) => {
-//         if (!touchStart) return;
-//         const t = e.changedTouches[0];
-//         const dx = t.clientX - touchStart.x; const dy = t.clientY - touchStart.y;
-//         if (Math.abs(dx) > Math.abs(dy)) {
-//             if (dx > 20) enqueueDir(1, 0); else if (dx < -20) enqueueDir(-1, 0);
-//         } else {
-//             if (dy > 20) enqueueDir(0, 1); else if (dy < -20) enqueueDir(0, -1);
-//         }
-//         if (!isRunning && !isGameOver) start();
-//         touchStart = null;
-//     }, { passive: true });
-
-//     // 初始化与启动主循环
-//     applyTheme(currentTheme);
-//     refreshSoundButton();
-//     initGame();
-//     requestAnimationFrame(loop);
-// })();
-
-/* script.js — 重构版（模块化单文件） */
-/* 直接替换原 script.js 即可运行（需配合你现有的 index.html / style.css） */
-
 (() => {
-  /* ==========================
-     Config / State
-     ========================== */
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
-
-  // UI elements
-  const scoreEl = document.getElementById('score');
-  const speedEl = document.getElementById('speed');
-  const btnPause = document.getElementById('btn-pause');
-  const btnRestart = document.getElementById('btn-restart');
-  const themeSelect = document.getElementById('theme-select');
-  const btnSound = document.getElementById('btn-sound');
-  const overlay = document.getElementById('overlay');
-  const overlayTitle = document.getElementById('overlay-title');
-  const overlayTip = document.getElementById('overlay-tip');
-  const overlayRestart = document.getElementById('overlay-restart');
-  const overlayStart = document.getElementById('overlay-start');
-
-  // new controls
-  const cellsSelect = document.getElementById('cells-select');
-  const boundarySelect = document.getElementById('boundary-select');
-  const modeSelect = document.getElementById('mode-select');
-  const skinSelect = document.getElementById('skin-select');
-  const btnContinue = document.getElementById('btn-continue');
-  const btnSave = document.getElementById('btn-save');
-  const btnClearSave = document.getElementById('btn-clear-save');
-  const hiscoreList = document.getElementById('hiscore-list');
-
-  // base config (constants)
-  const DEFAULT_CELLS = 24;
-  const CANVAS_SIZE = 480; // the canvas in HTML has width/height 480
-  const BASE_TICK_MS = 140;
-  const MIN_TICK_MS = 60;
-
-  // runtime state (mutable)
-  let cells = DEFAULT_CELLS;
-  let gridSize = Math.floor(CANVAS_SIZE / cells);
-
-  let snake = null; // array of {x,y}
-  let direction = { x: 1, y: 0 };
-  let nextDirQueue = [];
-  let food = null;
-  let obstacles = [];
-  let score = 0;
-  let tickMs = BASE_TICK_MS;
-  let isRunning = false;
-  let isGameOver = false;
-  let lastTickAt = 0;
-  let foodsEaten = 0;
-  let timeLeftMs = 60000;
-
-  // preferences (persisted)
-  let boundaryMode = localStorage.getItem('snake.boundary') || 'normal';
-  let gameMode = localStorage.getItem('snake.mode') || 'classic';
-  let skin = localStorage.getItem('snake.skin') || 'emerald';
-  let currentTheme = localStorage.getItem('snake.theme') || 'dark';
-
-  // palette (will be loaded from CSS vars)
-  const palette = {
-    boardA: '#0b1227',
-    boardB: '#0a1023',
-    snakeHead: '#34d399',
-    snakeBody: '#10b981',
-    food: '#f87171',
-    foodStroke: 'rgba(0,0,0,.35)'
-  };
-
-  /* ==========================
-     Utilities
-     ========================== */
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const randInt = (n) => Math.floor(Math.random() * n);
-
-  /* ==========================
-     Storage (robust)
-     ========================== */
-  const STORAGE_SAVE_KEY = 'snake.save';
-  const STORAGE_HISCORE_PREFIX = 'snake.hiscores.';
-
-  function safeParse(str) {
-    try { return JSON.parse(str); } catch { return null; }
-  }
-
-  function saveState() {
-    try {
-      const state = {
-        v: 1,
-        snake,
-        direction,
-        food,
-        score,
-        tickMs,
-        cells,
-        boundaryMode,
-        gameMode,
-        skin,
-        timeLeftMs,
-        obstacles,
-        foodsEaten
-      };
-      localStorage.setItem(STORAGE_SAVE_KEY, JSON.stringify(state));
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  function loadState() {
-    const s = localStorage.getItem(STORAGE_SAVE_KEY);
-    if (!s) return false;
-    const st = safeParse(s);
-    if (!st || typeof st !== 'object') return false;
-    // Validate core fields (snake must be non-empty array of objects with x,y)
-    if (!Array.isArray(st.snake) || st.snake.length === 0) return false;
-    const validSnake = st.snake.every(p => p && Number.isInteger(p.x) && Number.isInteger(p.y));
-    if (!validSnake) return false;
-
-    // apply fields with guards
-    snake = st.snake.slice();
-    direction = (st.direction && typeof st.direction.x === 'number' && typeof st.direction.y === 'number') ? st.direction : { x: 1, y: 0 };
-    food = (st.food && Number.isInteger(st.food.x) && Number.isInteger(st.food.y)) ? st.food : null;
-    score = Number.isFinite(st.score) ? st.score : 0;
-    tickMs = Number.isFinite(st.tickMs) ? st.tickMs : BASE_TICK_MS;
-    cells = Number.isInteger(st.cells) ? st.cells : cells;
-    boundaryMode = st.boundaryMode || boundaryMode;
-    gameMode = st.gameMode || gameMode;
-    skin = st.skin || skin;
-    timeLeftMs = Number.isFinite(st.timeLeftMs) ? st.timeLeftMs : 60000;
-    obstacles = Array.isArray(st.obstacles) ? st.obstacles.filter(o => Number.isInteger(o.x) && Number.isInteger(o.y)) : [];
-    foodsEaten = Number.isInteger(st.foodsEaten) ? st.foodsEaten : 0;
-
-    // adjust grid
-    gridSize = Math.floor(CANVAS_SIZE / cells);
-    applySkin(skin); // set palette
-    updateHUD();
-    draw(); // safe to call since snake is valid
-    showOverlay(true, '已加载存档', '按任意方向键继续', false);
-    isRunning = false;
-    isGameOver = false;
-    return true;
-  }
-
-  function clearSave() {
-    localStorage.removeItem(STORAGE_SAVE_KEY);
-  }
-
-  /* ==========================
-     Audio (safe)
-     ========================== */
-  const audio = {
-    ctx: null,
-    enabled: localStorage.getItem('snake.sound') !== 'off',
-    ensure() {
-      if (!this.ctx) {
-        try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch { this.ctx = null; }
-      }
-    },
-    play(freq = 440, duration = 0.1, type = 'sine', volume = 0.15) {
-      if (!this.enabled) return;
-      try {
-        this.ensure();
-        if (!this.ctx) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, now);
-        gain.gain.setValueAtTime(volume, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(now);
-        osc.stop(now + duration);
-      } catch (e) { /* ignore */ }
-    },
-    eat() { this.play(660, 0.09, 'triangle', 0.18); },
-    over() {
-      this.ensure();
-      this.play(300, 0.18, 'sawtooth', 0.15);
-      setTimeout(() => this.play(180, 0.22, 'sawtooth', 0.15), 160);
-    }
-  };
-
-  /* ==========================
-     Renderer
-     ========================== */
-  function loadPaletteFromCSS() {
-    // Do NOT call draw() here — palette load should not force draw before init.
-    const target = (document.body.classList.contains('theme-light') || document.body.classList.contains('theme-neon')) ? document.body : document.documentElement;
-    const cs = getComputedStyle(target);
-    const pick = (name, fallback) => {
-      try {
-        const v = cs.getPropertyValue(name).trim();
-        return v || fallback;
-      } catch { return fallback; }
+    const CANVAS_SIZE = 560;
+    const DEFAULT_SIZE = 24;
+    const BASE_SPEEDS = {
+        classic: 150,
+        sprint: 125,
+        zen: 170
     };
-    palette.boardA = pick('--board-a', palette.boardA);
-    palette.boardB = pick('--board-b', palette.boardB);
-    palette.snakeHead = pick('--snake-head', palette.snakeHead);
-    palette.snakeBody = pick('--snake-body', palette.snakeBody);
-    palette.food = pick('--food', palette.food);
-    palette.foodStroke = pick('--food-stroke', palette.foodStroke);
-  }
+    const MODE_INFO = {
+        classic: {
+            hint: "经典模式，撞墙结束。",
+            timerLabel: "当前计时：不限时"
+        },
+        sprint: {
+            hint: "60 秒冲刺，速度提升更快。",
+            timerLabel: "当前计时：60 秒倒计时"
+        },
+        zen: {
+            hint: "放松模式，不会继续加速。",
+            timerLabel: "当前计时：不限时"
+        }
+    };
+    const SKINS = {
+        mint: { head: "#7cf4c5", body: "#31c48d" },
+        ocean: { head: "#7dd3fc", body: "#0ea5e9" },
+        sunset: { head: "#fbbf24", body: "#f97316" },
+        plum: { head: "#c4b5fd", body: "#8b5cf6" }
+    };
+    const STORAGE = {
+        settings: "snake-lab.settings",
+        records: "snake-lab.records",
+        snapshot: "snake-lab.snapshot"
+    };
 
-  function drawBoard() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (let y = 0; y < cells; y++) {
-      for (let x = 0; x < cells; x++) {
-        const even = ((x + y) % 2) === 0;
-        ctx.fillStyle = even ? palette.boardA : palette.boardB;
-        ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-      }
-    }
-  }
+    const canvas = document.getElementById("game-board");
+    const ctx = canvas.getContext("2d");
+    const scoreValue = document.getElementById("score-value");
+    const bestValue = document.getElementById("best-value");
+    const speedValue = document.getElementById("speed-value");
+    const statusValue = document.getElementById("status-value");
+    const modeHint = document.getElementById("mode-hint");
+    const timerLabel = document.getElementById("timer-label");
+    const recordsList = document.getElementById("records-list");
+    const overlay = document.getElementById("overlay");
+    const overlayKicker = document.getElementById("overlay-kicker");
+    const overlayTitle = document.getElementById("overlay-title");
+    const overlayText = document.getElementById("overlay-text");
+    const startButton = document.getElementById("start-button");
+    const pauseButton = document.getElementById("pause-button");
+    const restartButton = document.getElementById("restart-button");
+    const continueButton = document.getElementById("continue-button");
+    const overlayPrimary = document.getElementById("overlay-primary");
+    const overlaySecondary = document.getElementById("overlay-secondary");
+    const soundButton = document.getElementById("sound-button");
+    const clearSaveButton = document.getElementById("clear-save-button");
+    const themeSelect = document.getElementById("theme-select");
+    const sizeSelect = document.getElementById("size-select");
+    const boundarySelect = document.getElementById("boundary-select");
+    const modeSelect = document.getElementById("mode-select");
+    const skinSelect = document.getElementById("skin-select");
+    const padButtons = Array.from(document.querySelectorAll(".pad-button"));
 
-  function drawCell(x, y, color) {
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    ctx.fillStyle = color;
-    ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-  }
+    const settings = loadSettings();
+    const state = {
+        size: settings.size,
+        boundary: settings.boundary,
+        mode: settings.mode,
+        skin: settings.skin,
+        soundEnabled: settings.soundEnabled,
+        phase: "ready",
+        snake: [],
+        direction: { x: 1, y: 0 },
+        queuedDirection: null,
+        food: null,
+        score: 0,
+        best: 0,
+        elapsedMs: 0,
+        remainingMs: settings.mode === "sprint" ? 60000 : null,
+        speedMs: BASE_SPEEDS[settings.mode],
+        lastFrame: 0,
+        accumulator: 0
+    };
 
-  function drawSnakeSafe() {
-    if (!Array.isArray(snake) || snake.length === 0) return;
-    const head = snake[0];
-    if (!head) return;
-    drawCell(head.x, head.y, palette.snakeHead);
-    for (let i = 1; i < snake.length; i++) {
-      const s = snake[i];
-      if (s) drawCell(s.x, s.y, palette.snakeBody);
-    }
-  }
+    const palette = {
+        gridA: "",
+        gridB: "",
+        food: "",
+        foodGlow: "",
+        text: "",
+        snakeHead: "",
+        snakeBody: ""
+    };
 
-  function drawFood() {
-    if (!food) return;
-    const x = food.x * gridSize;
-    const y = food.y * gridSize;
-    ctx.fillStyle = palette.food;
-    ctx.fillRect(x + 4, y + 4, gridSize - 8, gridSize - 8);
-    ctx.strokeStyle = palette.foodStroke;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x + 4, y + 4, gridSize - 8, gridSize - 8);
-    ctx.fillStyle = 'rgba(255,255,255,.15)';
-    ctx.beginPath();
-    ctx.arc(x + gridSize - 10, y + 8, 6, 0, Math.PI * 2);
-    ctx.fill();
-  }
+    const audio = {
+        context: null,
+        ensure() {
+            if (this.context || !state.soundEnabled) {
+                return;
+            }
+            try {
+                this.context = new (window.AudioContext || window.webkitAudioContext)();
+            } catch {
+                this.context = null;
+            }
+        },
+        play(frequency, duration, type, gainValue) {
+            if (!state.soundEnabled) {
+                return;
+            }
+            this.ensure();
+            if (!this.context) {
+                return;
+            }
+            const now = this.context.currentTime;
+            const oscillator = this.context.createOscillator();
+            const gain = this.context.createGain();
+            oscillator.type = type;
+            oscillator.frequency.setValueAtTime(frequency, now);
+            gain.gain.setValueAtTime(gainValue, now);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+            oscillator.connect(gain);
+            gain.connect(this.context.destination);
+            oscillator.start(now);
+            oscillator.stop(now + duration);
+        },
+        eat() {
+            this.play(620, 0.08, "triangle", 0.14);
+        },
+        crash() {
+            this.play(180, 0.2, "sawtooth", 0.18);
+            setTimeout(() => this.play(120, 0.24, "square", 0.14), 90);
+        }
+    };
 
-  function drawObstacles() {
-    if (!obstacles || obstacles.length === 0) return;
-    ctx.fillStyle = 'rgba(148,163,184,.8)';
-    obstacles.forEach(o => {
-      if (o && Number.isFinite(o.x) && Number.isFinite(o.y)) {
-        ctx.fillRect(o.x * gridSize + 2, o.y * gridSize + 2, gridSize - 4, gridSize - 4);
-      }
-    });
-  }
-
-  // Particles will be handled in Effects section
-  function drawAll() {
-    drawBoard();
-    drawSnakeSafe();
-    drawFood();
-    drawObstacles();
-    renderParticles(); // from effects
-  }
-
-  /* ==========================
-     Effects (particles / shake)
-     ========================== */
-  const particles = [];
-  function spawnParticles(cellX, cellY, color) {
-    for (let i = 0; i < 10; i++) {
-      particles.push({
-        x: cellX * gridSize + gridSize / 2,
-        y: cellY * gridSize + gridSize / 2,
-        vx: (Math.random() - 0.5) * 120,
-        vy: (Math.random() - 0.5) * 120,
-        life: 300 + Math.random() * 200,
-        color
-      });
-    }
-  }
-
-  function updateParticles(dt) {
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.x += p.vx * (dt / 1000);
-      p.y += p.vy * (dt / 1000);
-      p.vx *= 0.98; p.vy *= 0.98;
-      p.life -= dt;
-      if (p.life <= 0) particles.splice(i, 1);
-    }
-  }
-
-  function renderParticles() {
-    particles.forEach(p => {
-      ctx.fillStyle = p.color;
-      ctx.globalAlpha = Math.max(0, p.life / 500);
-      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
-      ctx.globalAlpha = 1;
-    });
-  }
-
-  let shakeUntil = 0;
-  let shakeMag = 0;
-  function screenShake(mag = 6, duration = 250) {
-    shakeMag = mag;
-    shakeUntil = performance.now() + duration;
-  }
-
-  function drawWithOptionalShake() {
-    const now = performance.now();
-    if (now < shakeUntil) {
-      const ox = (Math.random() - 0.5) * shakeMag;
-      const oy = (Math.random() - 0.5) * shakeMag;
-      ctx.save();
-      ctx.translate(ox, oy);
-      drawAll();
-      ctx.restore();
-    } else {
-      drawAll();
-    }
-  }
-
-  /* ==========================
-     Game logic
-     ========================== */
-  function placeFood() {
-    // robust placement with maximum attempts
-    for (let attempt = 0; attempt < 500; attempt++) {
-      const x = randInt(cells);
-      const y = randInt(cells);
-      const onSnake = Array.isArray(snake) && snake.some(s => s.x === x && s.y === y);
-      const onObstacle = obstacles.some(o => o.x === x && o.y === y);
-      if (!onSnake && !onObstacle) { food = { x, y }; return; }
-    }
-    // fallback
-    food = null;
-  }
-
-  function addObstacle() {
-    for (let i = 0; i < 100; i++) {
-      const x = randInt(cells);
-      const y = randInt(cells);
-      const conflict = (Array.isArray(snake) && snake.some(s => s.x === x && s.y === y)) || (food && food.x === x && food.y === y) || obstacles.some(o => o.x === x && o.y === y);
-      if (!conflict) { obstacles.push({ x, y }); return; }
-    }
-  }
-
-  function step() {
-    // apply queued direction once per tick
-    if (nextDirQueue.length) {
-      const nd = nextDirQueue.shift();
-      if (!(direction.x === -nd.x && direction.y === -nd.y)) {
-        direction = nd;
-      }
+    function loadSettings() {
+        const fallback = {
+            theme: "dusk",
+            size: DEFAULT_SIZE,
+            boundary: "wall",
+            mode: "classic",
+            skin: "mint",
+            soundEnabled: true
+        };
+        try {
+            const raw = JSON.parse(localStorage.getItem(STORAGE.settings) || "null");
+            if (!raw || typeof raw !== "object") {
+                return fallback;
+            }
+            return {
+                theme: typeof raw.theme === "string" ? raw.theme : fallback.theme,
+                size: Number.isInteger(raw.size) ? raw.size : fallback.size,
+                boundary: typeof raw.boundary === "string" ? raw.boundary : fallback.boundary,
+                mode: typeof raw.mode === "string" ? raw.mode : fallback.mode,
+                skin: typeof raw.skin === "string" ? raw.skin : fallback.skin,
+                soundEnabled: typeof raw.soundEnabled === "boolean" ? raw.soundEnabled : fallback.soundEnabled
+            };
+        } catch {
+            return fallback;
+        }
     }
 
-    if (!Array.isArray(snake) || snake.length === 0) {
-      // defensive fallback: re-init if snake disappears
-      initGame();
-      return;
+    function saveSettings() {
+        localStorage.setItem(
+            STORAGE.settings,
+            JSON.stringify({
+                theme: document.documentElement.dataset.theme || "dusk",
+                size: state.size,
+                boundary: state.boundary,
+                mode: state.mode,
+                skin: state.skin,
+                soundEnabled: state.soundEnabled
+            })
+        );
     }
 
-    const head = snake[0];
-    const newHead = { x: head.x + direction.x, y: head.y + direction.y };
-
-    // boundary behavior
-    if (boundaryMode === 'normal') {
-      if (newHead.x < 0 || newHead.x >= cells || newHead.y < 0 || newHead.y >= cells) {
-        return gameOver(true);
-      }
-    } else if (boundaryMode === 'wrap') {
-      if (newHead.x < 0) newHead.x = cells - 1;
-      if (newHead.x >= cells) newHead.x = 0;
-      if (newHead.y < 0) newHead.y = cells - 1;
-      if (newHead.y >= cells) newHead.y = 0;
-    } else if (boundaryMode === 'bounce') {
-      if (newHead.x < 0 || newHead.x >= cells) {
-        direction.x = -direction.x;
-        newHead.x = head.x + direction.x;
-      }
-      if (newHead.y < 0 || newHead.y >= cells) {
-        direction.y = -direction.y;
-        newHead.y = head.y + direction.y;
-      }
+    function loadRecords() {
+        try {
+            const raw = JSON.parse(localStorage.getItem(STORAGE.records) || "[]");
+            return Array.isArray(raw) ? raw : [];
+        } catch {
+            return [];
+        }
     }
 
-    // collisions with self
-    if (snake.some((seg, idx) => idx !== 0 && seg.x === newHead.x && seg.y === newHead.y)) {
-      return gameOver(true);
-    }
-    // collisions with obstacles
-    if (obstacles.some(o => o.x === newHead.x && o.y === newHead.y)) {
-      return gameOver(true);
+    function saveRecords(records) {
+        localStorage.setItem(STORAGE.records, JSON.stringify(records.slice(0, 8)));
     }
 
-    // move
-    snake.unshift(newHead);
-
-    if (food && newHead.x === food.x && newHead.y === food.y) {
-      score += 10;
-      tickMs = Math.max(MIN_TICK_MS, tickMs - 5);
-      foodsEaten++;
-      audio.eat();
-      spawnParticles(food.x, food.y, palette.food);
-      placeFood();
-      if (foodsEaten % 3 === 0) addObstacle();
-      updateHUD();
-    } else {
-      snake.pop();
-    }
-  }
-
-  function gameOver(hit = false) {
-    isRunning = false;
-    isGameOver = true;
-    showOverlay(true, '游戏结束', `你的分数：${score}`, true);
-    audio.over();
-    if (hit) screenShake(8, 300);
-    submitHiscore();
-  }
-
-  /* ==========================
-     Input (keyboard/touch/controls)
-     ========================== */
-  function enqueueDir(nx, ny) {
-    const last = nextDirQueue.length ? nextDirQueue[nextDirQueue.length - 1] : direction;
-    if (last.x === -nx && last.y === -ny) return;
-    nextDirQueue.push({ x: nx, y: ny });
-  }
-
-  function handleKey(e) {
-    const k = e.key.toLowerCase();
-    if (k === 'arrowup' || k === 'w') enqueueDir(0, -1);
-    else if (k === 'arrowdown' || k === 's') enqueueDir(0, 1);
-    else if (k === 'arrowleft' || k === 'a') enqueueDir(-1, 0);
-    else if (k === 'arrowright' || k === 'd') enqueueDir(1, 0);
-    else if (k === 'p') togglePause();
-
-    if (!isRunning && !isGameOver && ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) start();
-  }
-
-  function handlePadClick(e) {
-    const dir = e.target.getAttribute && e.target.getAttribute('data-dir');
-    if (!dir) return;
-    if (dir === 'up') enqueueDir(0, -1);
-    if (dir === 'down') enqueueDir(0, 1);
-    if (dir === 'left') enqueueDir(-1, 0);
-    if (dir === 'right') enqueueDir(1, 0);
-    if (!isRunning && !isGameOver) start();
-  }
-
-  // touch swipe
-  let touchStart = null;
-  function onTouchStart(e) {
-    const t = e.changedTouches[0];
-    touchStart = { x: t.clientX, y: t.clientY, t: performance.now() };
-  }
-  function onTouchMove(e) { e.preventDefault(); }
-  function onTouchEnd(e) {
-    if (!touchStart) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - touchStart.x;
-    const dy = t.clientY - touchStart.y;
-    if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 20) enqueueDir(1, 0);
-      else if (dx < -20) enqueueDir(-1, 0);
-    } else {
-      if (dy > 20) enqueueDir(0, 1);
-      else if (dy < -20) enqueueDir(0, -1);
-    }
-    if (!isRunning && !isGameOver) start();
-    touchStart = null;
-  }
-
-  /* ==========================
-     UI controls & HUD
-     ========================== */
-  function updateHUD() {
-    scoreEl.textContent = String(score);
-    speedEl.textContent = (BASE_TICK_MS / tickMs).toFixed(1) + 'x';
-    btnPause.textContent = isRunning ? '暂停' : '继续';
-  }
-
-  function showOverlay(show, title = '', tip = '', showRestart = false) {
-    overlay.classList.toggle('hidden', !show);
-    overlayTitle.textContent = title;
-    overlayTip.textContent = tip;
-    overlayRestart.classList.toggle('hidden', !showRestart);
-  }
-
-  function start() {
-    if (isGameOver) return;
-    isRunning = true;
-    showOverlay(false);
-    lastTickAt = performance.now();
-    updateHUD();
-    drawWithOptionalShake();
-  }
-
-  function togglePause() {
-    if (isGameOver) return;
-    isRunning = !isRunning;
-    if (!isRunning) {
-      showOverlay(true, '已暂停', '按 P 或方向键继续', false);
-    } else {
-      showOverlay(false);
-    }
-    updateHUD();
-  }
-
-  function restart() {
-    initGame();
-  }
-
-  /* ==========================
-     Hiscores
-     ========================== */
-  function loadHiscores() {
-    const key = STORAGE_HISCORE_PREFIX + gameMode;
-    let list = [];
-    try { list = JSON.parse(localStorage.getItem(key) || '[]'); } catch {}
-    return Array.isArray(list) ? list : [];
-  }
-
-  function saveHiscores(list) {
-    const key = STORAGE_HISCORE_PREFIX + gameMode;
-    try { localStorage.setItem(key, JSON.stringify(list.slice(0, 5))); } catch {}
-  }
-
-  function submitHiscore() {
-    const list = loadHiscores();
-    list.push({ score, date: Date.now(), cells, boundaryMode, skin });
-    list.sort((a, b) => b.score - a.score);
-    saveHiscores(list);
-    renderHiscores();
-  }
-
-  function renderHiscores() {
-    const list = loadHiscores();
-    hiscoreList.innerHTML = '';
-    list.slice(0, 5).forEach((h, i) => {
-      const li = document.createElement('li');
-      const d = new Date(h.date).toLocaleDateString();
-      li.textContent = `#${i+1} ${h.score}分 (${d})`;
-      hiscoreList.appendChild(li);
-    });
-  }
-
-  /* ==========================
-     Skin / Theme
-     ========================== */
-  function applySkin(name) {
-    skin = name;
-    localStorage.setItem('snake.skin', skin);
-    if (skin === 'emerald') { palette.snakeHead = '#34d399'; palette.snakeBody = '#10b981'; }
-    else if (skin === 'cyan') { palette.snakeHead = '#22d3ee'; palette.snakeBody = '#06b6d4'; }
-    else if (skin === 'amber') { palette.snakeHead = '#f59e0b'; palette.snakeBody = '#fbbf24'; }
-    else if (skin === 'violet') { palette.snakeHead = '#a78bfa'; palette.snakeBody = '#8b5cf6'; }
-    // don't call draw() here arbitrarily; caller will request redraw
-  }
-
-  function applyTheme(theme) {
-    currentTheme = theme;
-    document.body.classList.remove('theme-light', 'theme-neon');
-    if (theme === 'light') document.body.classList.add('theme-light');
-    if (theme === 'neon') document.body.classList.add('theme-neon');
-    localStorage.setItem('snake.theme', theme);
-    loadPaletteFromCSS();
-  }
-
-  /* ==========================
-     Init game / Resize / Setup
-     ========================== */
-  function setCells(n) {
-    cells = clamp(Number(n) || DEFAULT_CELLS, 8, 60);
-    gridSize = Math.floor(CANVAS_SIZE / cells);
-    // redraw later (caller)
-  }
-
-  function initGame() {
-    // ensure cells/grid valid
-    if (!Number.isInteger(cells) || cells <= 0) cells = DEFAULT_CELLS;
-    gridSize = Math.floor(CANVAS_SIZE / cells);
-
-    // initialize snake centrally
-    const sx = Math.floor(cells / 3);
-    const sy = Math.floor(cells / 2);
-    snake = [
-      { x: sx, y: sy },
-      { x: sx - 1, y: sy },
-      { x: sx - 2, y: sy }
-    ];
-    direction = { x: 1, y: 0 };
-    nextDirQueue = [];
-    score = 0;
-    tickMs = BASE_TICK_MS;
-    isRunning = false;
-    isGameOver = false;
-    foodsEaten = 0;
-    obstacles = [];
-    timeLeftMs = 60000;
-    placeFood();
-    updateHUD();
-    showOverlay(true, '按任意方向键开始', `W/A/S/D 或 方向键移动 · P 暂停/继续${gameMode === 'time' ? ' · 时间挑战' : ''}`, false);
-    drawWithOptionalShake();
-  }
-
-  /* ==========================
-     Event bindings
-     ========================== */
-  function bindEvents() {
-    // keyboard
-    window.addEventListener('keydown', handleKey);
-    // mobile pad
-    const mobile = document.querySelector('.mobile-controls');
-    if (mobile) mobile.addEventListener('click', handlePadClick);
-    // buttons
-    btnPause.addEventListener('click', togglePause);
-    btnRestart.addEventListener('click', restart);
-    overlayRestart.addEventListener('click', restart);
-    if (overlayStart) overlayStart.addEventListener('click', () => { if (!isRunning && !isGameOver) start(); });
-    if (canvas) canvas.addEventListener('click', () => { if (!isRunning && !isGameOver) start(); });
-    // safe overlay click
-    const ov = document.getElementById('overlay');
-    if (ov) ov.addEventListener('click', (e) => {
-      if (e.target && (e.target.id === 'overlay-start' || e.target.id === 'overlay-restart')) return;
-      if (!isRunning) start();
-    });
-
-    // theme / sound controls
-    if (themeSelect) {
-      themeSelect.value = currentTheme;
-      themeSelect.addEventListener('change', (e) => { applyTheme(e.target.value); drawWithOptionalShake(); });
+    function getBestScore() {
+        const best = loadRecords().reduce((max, item) => Math.max(max, item.score || 0), 0);
+        state.best = best;
+        return best;
     }
 
-    function refreshSoundButton() {
-      btnSound.textContent = '音效：' + (audio.enabled ? '开' : '关');
-      btnSound.setAttribute('aria-pressed', String(audio.enabled));
-    }
-    refreshSoundButton();
-    btnSound.addEventListener('click', () => {
-      audio.enabled = !audio.enabled;
-      localStorage.setItem('snake.sound', audio.enabled ? 'on' : 'off');
-      refreshSoundButton();
-      if (audio.enabled) audio.play(880, 0.06, 'square', 0.1);
-    });
-
-    // controls for selects
-    if (cellsSelect) {
-      cellsSelect.value = String(localStorage.getItem('snake.cells') || cells);
-      cells = parseInt(cellsSelect.value, 10) || cells;
-      setCells(cells);
-      cellsSelect.addEventListener('change', (e) => {
-        const n = parseInt(e.target.value, 10);
-        localStorage.setItem('snake.cells', String(n));
-        setCells(n);
-        restart();
-      });
-    }
-    if (boundarySelect) {
-      boundarySelect.value = boundaryMode;
-      boundarySelect.addEventListener('change', (e) => {
-        boundaryMode = e.target.value; localStorage.setItem('snake.boundary', boundaryMode); restart();
-      });
-    }
-    if (modeSelect) {
-      modeSelect.value = gameMode;
-      modeSelect.addEventListener('change', (e) => {
-        gameMode = e.target.value; localStorage.setItem('snake.mode', gameMode);
-        timeLeftMs = 60000; restart();
-      });
-    }
-    if (skinSelect) {
-      skinSelect.value = skin;
-      skinSelect.addEventListener('change', (e) => { applySkin(e.target.value); drawWithOptionalShake(); });
+    function renderRecords() {
+        const records = loadRecords();
+        recordsList.innerHTML = "";
+        if (!records.length) {
+            const empty = document.createElement("li");
+            empty.textContent = "还没有记录，先跑出第一局。";
+            recordsList.appendChild(empty);
+            bestValue.textContent = "0";
+            return;
+        }
+        records.forEach((item) => {
+            const line = document.createElement("li");
+            const date = new Date(item.date).toLocaleDateString("zh-CN");
+            const label = `${item.score} 分 · ${item.modeLabel} · ${item.size}x${item.size} · ${date}`;
+            line.textContent = label;
+            recordsList.appendChild(line);
+        });
+        bestValue.textContent = String(getBestScore());
     }
 
-    // hiscore / save buttons
-    btnSave.addEventListener('click', () => { saveState(); audio.play(880, 0.06, 'square', 0.1); });
-    btnContinue.addEventListener('click', () => { if (!loadState()) { overlayTitle.textContent = '没有可用的存档'; overlay.classList.remove('hidden'); } });
-    btnClearSave.addEventListener('click', () => { clearSave(); renderHiscores(); });
-    window.addEventListener('beforeunload', () => { try { saveState(); } catch {} });
-
-    // touch
-    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
-    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-    canvas.addEventListener('touchend', onTouchEnd, { passive: true });
-  }
-
-  /* ==========================
-     Main Loop
-     ========================== */
-  function loop(ts) {
-    requestAnimationFrame(loop);
-    if (!isRunning || isGameOver) {
-      // still update particles for visual polish
-      updateParticles(16.7);
-      return;
+    function saveSnapshot() {
+        if (state.phase === "over") {
+            localStorage.removeItem(STORAGE.snapshot);
+            refreshContinueButton();
+            return;
+        }
+        localStorage.setItem(
+            STORAGE.snapshot,
+            JSON.stringify({
+                size: state.size,
+                boundary: state.boundary,
+                mode: state.mode,
+                skin: state.skin,
+                score: state.score,
+                elapsedMs: state.elapsedMs,
+                remainingMs: state.remainingMs,
+                speedMs: state.speedMs,
+                phase: state.phase,
+                direction: state.direction,
+                queuedDirection: state.queuedDirection,
+                snake: state.snake,
+                food: state.food
+            })
+        );
+        refreshContinueButton();
     }
-    if (ts - lastTickAt >= tickMs) {
-      lastTickAt = ts;
-      step();
-      // handle time mode
-      if (gameMode === 'time' && isRunning) {
-        timeLeftMs = Math.max(0, timeLeftMs - tickMs);
-        if (timeLeftMs <= 0) { gameOver(false); }
-      }
-      drawWithOptionalShake();
+
+    function loadSnapshot() {
+        try {
+            const raw = JSON.parse(localStorage.getItem(STORAGE.snapshot) || "null");
+            if (!raw || !Array.isArray(raw.snake) || !raw.food) {
+                return false;
+            }
+            state.size = Number.isInteger(raw.size) ? raw.size : DEFAULT_SIZE;
+            state.boundary = raw.boundary === "wrap" ? "wrap" : "wall";
+            state.mode = raw.mode in BASE_SPEEDS ? raw.mode : "classic";
+            state.skin = raw.skin in SKINS ? raw.skin : "mint";
+            state.score = Number.isFinite(raw.score) ? raw.score : 0;
+            state.elapsedMs = Number.isFinite(raw.elapsedMs) ? raw.elapsedMs : 0;
+            state.remainingMs = Number.isFinite(raw.remainingMs) ? raw.remainingMs : (state.mode === "sprint" ? 60000 : null);
+            state.speedMs = Number.isFinite(raw.speedMs) ? raw.speedMs : BASE_SPEEDS[state.mode];
+            state.phase = "paused";
+            state.direction = isDirection(raw.direction) ? raw.direction : { x: 1, y: 0 };
+            state.queuedDirection = isDirection(raw.queuedDirection) ? raw.queuedDirection : null;
+            state.snake = raw.snake.map((segment) => ({
+                x: Math.max(0, Math.min(state.size - 1, segment.x)),
+                y: Math.max(0, Math.min(state.size - 1, segment.y))
+            }));
+            state.food = {
+                x: Math.max(0, Math.min(state.size - 1, raw.food.x)),
+                y: Math.max(0, Math.min(state.size - 1, raw.food.y))
+            };
+            syncControls();
+            refreshModeText();
+            refreshPalette();
+            updateHud();
+            showOverlay("continue");
+            draw();
+            return true;
+        } catch {
+            return false;
+        }
     }
-    updateParticles(16.7);
-  }
 
-  /* ==========================
-     Initialize & Start
-     ========================== */
-  function boot() {
-    // set canvas size explicitly from constant (match HTML)
-    canvas.width = CANVAS_SIZE;
-    canvas.height = CANVAS_SIZE;
-
-    // load palette (but do not draw yet)
-    applyTheme(currentTheme);
-    loadPaletteFromCSS();
-    applySkin(skin);
-
-    // events
-    bindEvents();
-
-    // hiscores render
-    renderHiscores();
-
-    // try to load state; if failed, init fresh game
-    const loaded = loadState();
-    if (!loaded) {
-      initGame();
+    function clearSnapshot() {
+        localStorage.removeItem(STORAGE.snapshot);
+        refreshContinueButton();
     }
-    // start RAF loop
-    requestAnimationFrame((t) => { lastTickAt = t; requestAnimationFrame(loop); });
-  }
 
-  /* ==========================
-     Kickoff
-     ========================== */
-  boot();
+    function isDirection(value) {
+        return value && Number.isFinite(value.x) && Number.isFinite(value.y);
+    }
 
+    function applyTheme(theme) {
+        const nextTheme = theme === "paper" || theme === "arcade" ? theme : "dusk";
+        document.documentElement.dataset.theme = nextTheme;
+        themeSelect.value = nextTheme;
+        refreshPalette();
+        saveSettings();
+        draw();
+    }
+
+    function refreshPalette() {
+        const rootStyle = getComputedStyle(document.documentElement);
+        palette.gridA = rootStyle.getPropertyValue("--grid-a").trim();
+        palette.gridB = rootStyle.getPropertyValue("--grid-b").trim();
+        palette.food = rootStyle.getPropertyValue("--food").trim();
+        palette.foodGlow = rootStyle.getPropertyValue("--food-glow").trim();
+        palette.text = rootStyle.getPropertyValue("--text").trim();
+        const skin = SKINS[state.skin] || SKINS.mint;
+        palette.snakeHead = skin.head;
+        palette.snakeBody = skin.body;
+    }
+
+    function refreshModeText() {
+        modeHint.textContent = MODE_INFO[state.mode].hint;
+        timerLabel.textContent = MODE_INFO[state.mode].timerLabel;
+    }
+
+    function refreshContinueButton() {
+        continueButton.disabled = !localStorage.getItem(STORAGE.snapshot);
+    }
+
+    function syncControls() {
+        themeSelect.value = document.documentElement.dataset.theme || settings.theme;
+        sizeSelect.value = String(state.size);
+        boundarySelect.value = state.boundary;
+        modeSelect.value = state.mode;
+        skinSelect.value = state.skin;
+        soundButton.textContent = `音效：${state.soundEnabled ? "开" : "关"}`;
+    }
+
+    function updateHud() {
+        scoreValue.textContent = String(state.score);
+        bestValue.textContent = String(state.best);
+        speedValue.textContent = `${(BASE_SPEEDS.classic / state.speedMs).toFixed(1)}x`;
+        startButton.textContent = state.phase === "paused" ? "继续游戏" : "开始游戏";
+        pauseButton.textContent = state.phase === "running" ? "暂停" : "继续";
+
+        if (state.phase === "running") {
+            statusValue.textContent = state.mode === "sprint"
+                ? `剩余 ${Math.max(0, Math.ceil(state.remainingMs / 1000))} 秒`
+                : "进行中";
+        } else if (state.phase === "paused") {
+            statusValue.textContent = "已暂停";
+        } else if (state.phase === "over") {
+            statusValue.textContent = "已结束";
+        } else {
+            statusValue.textContent = "待开始";
+        }
+    }
+
+    function setOverlay(visible, kicker, title, text, primaryText) {
+        overlay.classList.toggle("hidden", !visible);
+        overlayKicker.textContent = kicker;
+        overlayTitle.textContent = title;
+        overlayText.textContent = text;
+        overlayPrimary.textContent = primaryText;
+    }
+
+    function showOverlay(type) {
+        if (type === "ready") {
+            setOverlay(true, "准备就绪", "按开始按钮或方向键进入游戏", "切换主题和模式后会自动重开。移动端可直接使用下方方向按钮。", "开始游戏");
+        } else if (type === "paused") {
+            setOverlay(true, "暂停中", "当前对局已暂停", "按继续按钮、空格键或任意方向键回到游戏。", "继续游戏");
+        } else if (type === "continue") {
+            setOverlay(true, "发现继续记录", "可以从上次暂停位置接着玩", "已恢复棋盘、分数和速度，开始后会从暂停状态继续。", "继续游戏");
+        } else if (type === "over") {
+            setOverlay(true, "游戏结束", `本局得分 ${state.score}`, "重新开始会保留设置，但会清空当前对局。", "再来一局");
+        } else {
+            overlay.classList.add("hidden");
+        }
+    }
+
+    function resetGame() {
+        const middleY = Math.floor(state.size / 2);
+        const startX = Math.floor(state.size / 3);
+        state.snake = [
+            { x: startX, y: middleY },
+            { x: startX - 1, y: middleY },
+            { x: startX - 2, y: middleY }
+        ];
+        state.direction = { x: 1, y: 0 };
+        state.queuedDirection = null;
+        state.food = null;
+        state.score = 0;
+        state.elapsedMs = 0;
+        state.remainingMs = state.mode === "sprint" ? 60000 : null;
+        state.speedMs = BASE_SPEEDS[state.mode];
+        state.phase = "ready";
+        state.lastFrame = 0;
+        state.accumulator = 0;
+        placeFood();
+        updateHud();
+        showOverlay("ready");
+        draw();
+        saveSnapshot();
+    }
+
+    function startGame() {
+        if (state.phase === "over") {
+            resetGame();
+        }
+        state.phase = "running";
+        state.lastFrame = performance.now();
+        state.accumulator = 0;
+        showOverlay("hidden");
+        updateHud();
+        saveSnapshot();
+    }
+
+    function pauseGame() {
+        if (state.phase !== "running") {
+            return;
+        }
+        state.phase = "paused";
+        showOverlay("paused");
+        updateHud();
+        saveSnapshot();
+    }
+
+    function restartGame() {
+        clearSnapshot();
+        resetGame();
+    }
+
+    function endGame(reason) {
+        state.phase = "over";
+        updateHud();
+        saveRecord();
+        showOverlay("over");
+        audio.crash();
+        if (reason === "time") {
+            overlayText.textContent = "时间到。可以调整模式或直接重新开始。";
+        } else if (reason === "clear") {
+            overlayText.textContent = "棋盘已经被你吃满了，这局算通关。";
+        } else {
+            overlayText.textContent = "撞到了。可以试试穿墙模式，或者把棋盘调小一点。";
+        }
+        clearSnapshot();
+        draw();
+    }
+
+    function saveRecord() {
+        if (state.score <= 0) {
+            renderRecords();
+            return;
+        }
+        const records = loadRecords();
+        records.push({
+            score: state.score,
+            mode: state.mode,
+            modeLabel: modeSelect.options[modeSelect.selectedIndex].text,
+            size: state.size,
+            date: Date.now()
+        });
+        records.sort((a, b) => b.score - a.score);
+        saveRecords(records);
+        state.best = getBestScore();
+        renderRecords();
+        updateHud();
+    }
+
+    function placeFood() {
+        for (let attempt = 0; attempt < 600; attempt += 1) {
+            const next = {
+                x: Math.floor(Math.random() * state.size),
+                y: Math.floor(Math.random() * state.size)
+            };
+            const collision = state.snake.some((segment) => segment.x === next.x && segment.y === next.y);
+            if (!collision) {
+                state.food = next;
+                return;
+            }
+        }
+    }
+
+    function queueDirection(nextDirection) {
+        const reference = state.queuedDirection || state.direction;
+        if (reference.x === -nextDirection.x && reference.y === -nextDirection.y) {
+            return;
+        }
+        state.queuedDirection = nextDirection;
+    }
+
+    function applyQueuedDirection() {
+        if (!state.queuedDirection) {
+            return;
+        }
+        const next = state.queuedDirection;
+        if (!(state.direction.x === -next.x && state.direction.y === -next.y)) {
+            state.direction = next;
+        }
+        state.queuedDirection = null;
+    }
+
+    function stepGame() {
+        applyQueuedDirection();
+        const currentHead = state.snake[0];
+        const nextHead = {
+            x: currentHead.x + state.direction.x,
+            y: currentHead.y + state.direction.y
+        };
+
+        if (state.boundary === "wrap") {
+            nextHead.x = (nextHead.x + state.size) % state.size;
+            nextHead.y = (nextHead.y + state.size) % state.size;
+        } else if (
+            nextHead.x < 0 ||
+            nextHead.x >= state.size ||
+            nextHead.y < 0 ||
+            nextHead.y >= state.size
+        ) {
+            endGame("wall");
+            return;
+        }
+
+        const tail = state.snake[state.snake.length - 1];
+        const hitsSelf = state.snake.some((segment, index) => {
+            if (index === state.snake.length - 1 && tail.x === nextHead.x && tail.y === nextHead.y) {
+                return false;
+            }
+            return segment.x === nextHead.x && segment.y === nextHead.y;
+        });
+
+        if (hitsSelf) {
+            endGame("self");
+            return;
+        }
+
+        state.snake.unshift(nextHead);
+
+        if (state.food && nextHead.x === state.food.x && nextHead.y === state.food.y) {
+            state.score += state.mode === "sprint" ? 15 : 10;
+            if (state.mode !== "zen") {
+                state.speedMs = Math.max(70, state.speedMs - (state.mode === "sprint" ? 6 : 4));
+            }
+            audio.eat();
+            placeFood();
+        } else {
+            state.snake.pop();
+        }
+
+        if (state.snake.length === state.size * state.size) {
+            endGame("clear");
+            return;
+        }
+
+        state.elapsedMs += state.speedMs;
+        updateHud();
+        saveSnapshot();
+    }
+
+    function drawRoundedCell(x, y, color, inset, radius) {
+        const cellSize = CANVAS_SIZE / state.size;
+        const left = x * cellSize + inset;
+        const top = y * cellSize + inset;
+        const width = cellSize - inset * 2;
+        const height = cellSize - inset * 2;
+
+        ctx.fillStyle = color;
+        if (typeof ctx.roundRect === "function") {
+            ctx.beginPath();
+            ctx.roundRect(left, top, width, height, radius);
+            ctx.fill();
+            return;
+        }
+        ctx.fillRect(left, top, width, height);
+    }
+
+    function drawBoard() {
+        const cellSize = CANVAS_SIZE / state.size;
+        ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+        for (let row = 0; row < state.size; row += 1) {
+            for (let col = 0; col < state.size; col += 1) {
+                ctx.fillStyle = (row + col) % 2 === 0 ? palette.gridA : palette.gridB;
+                ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+            }
+        }
+
+        ctx.strokeStyle = "rgba(255,255,255,0.04)";
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= state.size; i += 1) {
+            const offset = i * cellSize;
+            ctx.beginPath();
+            ctx.moveTo(offset, 0);
+            ctx.lineTo(offset, CANVAS_SIZE);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, offset);
+            ctx.lineTo(CANVAS_SIZE, offset);
+            ctx.stroke();
+        }
+    }
+
+    function drawSnake() {
+        state.snake.forEach((segment, index) => {
+            drawRoundedCell(segment.x, segment.y, index === 0 ? palette.snakeHead : palette.snakeBody, 2.5, 8);
+        });
+    }
+
+    function drawFood() {
+        if (!state.food) {
+            return;
+        }
+        const cellSize = CANVAS_SIZE / state.size;
+        const centerX = state.food.x * cellSize + cellSize / 2;
+        const centerY = state.food.y * cellSize + cellSize / 2;
+        const radius = Math.max(5, cellSize * 0.24);
+
+        ctx.save();
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = palette.foodGlow;
+        ctx.fillStyle = palette.food;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function drawMeta() {
+        ctx.fillStyle = palette.text;
+        ctx.font = "600 16px Bahnschrift, 'Microsoft YaHei UI', sans-serif";
+        ctx.fillText(`模式 ${modeSelect.options[modeSelect.selectedIndex].text}`, 16, CANVAS_SIZE - 18);
+
+        if (state.mode === "sprint" && Number.isFinite(state.remainingMs)) {
+            const seconds = Math.max(0, Math.ceil(state.remainingMs / 1000));
+            ctx.fillText(`倒计时 ${seconds}s`, CANVAS_SIZE - 110, 24);
+        } else {
+            ctx.fillText(`${state.size}x${state.size}`, CANVAS_SIZE - 72, 24);
+        }
+    }
+
+    function draw() {
+        drawBoard();
+        drawFood();
+        drawSnake();
+        drawMeta();
+    }
+
+    function handleDirectionInput(name) {
+        const mapping = {
+            up: { x: 0, y: -1 },
+            down: { x: 0, y: 1 },
+            left: { x: -1, y: 0 },
+            right: { x: 1, y: 0 }
+        };
+        const direction = mapping[name];
+        if (!direction) {
+            return;
+        }
+        queueDirection(direction);
+        if (state.phase === "ready" || state.phase === "paused") {
+            startGame();
+        }
+    }
+
+    function handleKeyDown(event) {
+        const key = event.key.toLowerCase();
+        if (["arrowup", "w"].includes(key)) {
+            event.preventDefault();
+            handleDirectionInput("up");
+        } else if (["arrowdown", "s"].includes(key)) {
+            event.preventDefault();
+            handleDirectionInput("down");
+        } else if (["arrowleft", "a"].includes(key)) {
+            event.preventDefault();
+            handleDirectionInput("left");
+        } else if (["arrowright", "d"].includes(key)) {
+            event.preventDefault();
+            handleDirectionInput("right");
+        } else if (key === " " || key === "p") {
+            event.preventDefault();
+            if (state.phase === "running") {
+                pauseGame();
+            } else if (state.phase === "paused" || state.phase === "ready") {
+                startGame();
+            }
+        } else if (key === "r") {
+            restartGame();
+        }
+    }
+
+    function handlePadClick(event) {
+        handleDirectionInput(event.currentTarget.dataset.direction);
+    }
+
+    function handleSettingChange() {
+        state.size = Number(sizeSelect.value);
+        state.boundary = boundarySelect.value;
+        state.mode = modeSelect.value;
+        state.skin = skinSelect.value;
+        refreshModeText();
+        refreshPalette();
+        saveSettings();
+        restartGame();
+    }
+
+    function loop(timestamp) {
+        if (!state.lastFrame) {
+            state.lastFrame = timestamp;
+        }
+        const delta = timestamp - state.lastFrame;
+        state.lastFrame = timestamp;
+
+        if (state.phase === "running") {
+            state.accumulator += delta;
+            if (state.mode === "sprint" && Number.isFinite(state.remainingMs)) {
+                state.remainingMs = Math.max(0, state.remainingMs - delta);
+                if (state.remainingMs <= 0) {
+                    endGame("time");
+                }
+            }
+            while (state.phase === "running" && state.accumulator >= state.speedMs) {
+                state.accumulator -= state.speedMs;
+                stepGame();
+            }
+            updateHud();
+            draw();
+        }
+
+        requestAnimationFrame(loop);
+    }
+
+    function bindEvents() {
+        startButton.addEventListener("click", startGame);
+        pauseButton.addEventListener("click", () => {
+            if (state.phase === "running") {
+                pauseGame();
+            } else if (state.phase === "paused" || state.phase === "ready") {
+                startGame();
+            }
+        });
+        restartButton.addEventListener("click", restartGame);
+        continueButton.addEventListener("click", () => {
+            if (!loadSnapshot()) {
+                resetGame();
+            }
+        });
+        overlayPrimary.addEventListener("click", startGame);
+        overlaySecondary.addEventListener("click", restartGame);
+        soundButton.addEventListener("click", () => {
+            state.soundEnabled = !state.soundEnabled;
+            soundButton.textContent = `音效：${state.soundEnabled ? "开" : "关"}`;
+            saveSettings();
+            if (state.soundEnabled) {
+                audio.play(480, 0.05, "square", 0.08);
+            }
+        });
+        clearSaveButton.addEventListener("click", clearSnapshot);
+        themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
+        sizeSelect.addEventListener("change", handleSettingChange);
+        boundarySelect.addEventListener("change", handleSettingChange);
+        modeSelect.addEventListener("change", handleSettingChange);
+        skinSelect.addEventListener("change", handleSettingChange);
+        padButtons.forEach((button) => button.addEventListener("click", handlePadClick));
+        window.addEventListener("keydown", handleKeyDown);
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden && state.phase === "running") {
+                pauseGame();
+            }
+        });
+        window.addEventListener("beforeunload", saveSnapshot);
+    }
+
+    function boot() {
+        canvas.width = CANVAS_SIZE;
+        canvas.height = CANVAS_SIZE;
+
+        document.documentElement.dataset.theme = settings.theme;
+        state.best = getBestScore();
+        syncControls();
+        refreshModeText();
+        refreshPalette();
+        renderRecords();
+        refreshContinueButton();
+        bindEvents();
+
+        if (!loadSnapshot()) {
+            resetGame();
+        }
+
+        updateHud();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    boot();
 })();
 

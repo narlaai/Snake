@@ -1,106 +1,169 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>贪吃蛇</title>
-    <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Lab</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <header class="topbar">
-            <div class="title">贪吃蛇</div>
-            <div class="stats">
-                <span>分数：<strong id="score">0</strong></span>
-                <span class="sep">|</span>
-                <span>速度：<strong id="speed">1x</strong></span>
-                <span class="sep">|</span>
-                <label for="theme-select">主题：</label>
-                <select id="theme-select" class="select">
-                    <option value="dark">深色</option>
-                    <option value="light">浅色</option>
-                    <option value="neon">霓虹</option>
-                </select>
-                <span class="sep">|</span>
-                <button id="btn-sound" class="btn" aria-pressed="true">音效：开</button>
-                <span class="sep">|</span>
-                <button id="btn-pause" class="btn">暂停</button>
-                <button id="btn-restart" class="btn">重开</button>
+    <main class="app-shell">
+        <section class="hero card">
+            <div>
+                <p class="eyebrow">Snake Lab</p>
+                <h1>重做版贪吃蛇</h1>
+                <p class="hero-copy">修掉原来的开始、颜色和交互问题，保留轻量、直接、好上手的单页体验。</p>
             </div>
-        </header>
-
-        <section class="toolbar">
-            <div class="row">
-                <label for="cells-select">网格：</label>
-                <select id="cells-select" class="select">
-                    <option value="16">16×16</option>
-                    <option value="20">20×20</option>
-                    <option value="24" selected>24×24</option>
-                    <option value="30">30×30</option>
-                </select>
-                <span class="sep">|</span>
-                <label for="boundary-select">边界：</label>
-                <select id="boundary-select" class="select">
-                    <option value="normal" selected>正常</option>
-                    <option value="wrap">穿墙</option>
-                    <option value="bounce">反弹</option>
-                </select>
-                <span class="sep">|</span>
-                <label for="mode-select">模式：</label>
-                <select id="mode-select" class="select">
-                    <option value="classic" selected>经典</option>
-                    <option value="time">时间挑战</option>
-                    <option value="endless">无尽加速</option>
-                </select>
-                <span class="sep">|</span>
-                <label for="skin-select">皮肤：</label>
-                <select id="skin-select" class="select">
-                    <option value="emerald" selected>翡翠</option>
-                    <option value="cyan">青蓝</option>
-                    <option value="amber">琥珀</option>
-                    <option value="violet">紫罗兰</option>
-                </select>
+            <div class="hero-actions">
+                <button id="start-button" class="button button-primary">开始游戏</button>
+                <button id="pause-button" class="button">暂停</button>
+                <button id="restart-button" class="button">重新开始</button>
+                <button id="continue-button" class="button">继续上次</button>
             </div>
         </section>
 
-        <main class="stage-wrap">
-            <canvas id="game" width="480" height="480"></canvas>
-            <div id="overlay" class="overlay">
-                <div class="overlay-content">
-                    <div id="overlay-title" class="overlay-title">按任意方向键开始</div>
-                    <div id="overlay-tip" class="overlay-tip">W/A/S/D 或 方向键移动 · P 暂停/继续</div>
-                    <button id="overlay-start" class="btn primary">开始游戏</button>
-                    <button id="overlay-restart" class="btn" style="margin-left:8px;">重新开始</button>
-                </div>
-            </div>
-        </main>
-
-        <section class="meta">
-            <div class="highscores">
-                <div class="meta-title">最高分</div>
-                <ul id="hiscore-list" class="hiscore-list"></ul>
-            </div>
-            <div class="save">
-                <button id="btn-continue" class="btn">继续上次</button>
-                <button id="btn-save" class="btn">手动存档</button>
-                <button id="btn-clear-save" class="btn">清除存档</button>
-            </div>
+        <section class="stats-grid">
+            <article class="stat-card card">
+                <span class="stat-label">分数</span>
+                <strong id="score-value" class="stat-value">0</strong>
+            </article>
+            <article class="stat-card card">
+                <span class="stat-label">最高分</span>
+                <strong id="best-value" class="stat-value">0</strong>
+            </article>
+            <article class="stat-card card">
+                <span class="stat-label">速度</span>
+                <strong id="speed-value" class="stat-value">1.0x</strong>
+            </article>
+            <article class="stat-card card">
+                <span class="stat-label">状态</span>
+                <strong id="status-value" class="stat-value">待开始</strong>
+            </article>
         </section>
 
-        <footer class="mobile-controls">
-            <div class="pad">
-                <button class="pad-btn" data-dir="up">▲</button>
-                <div class="pad-mid">
-                    <button class="pad-btn" data-dir="left">◀</button>
-                    <button class="pad-btn" data-dir="down">▼</button>
-                    <button class="pad-btn" data-dir="right">▶</button>
+        <section class="workspace">
+            <div class="board-panel card">
+                <div class="panel-header">
+                    <div>
+                        <p class="panel-kicker">游戏区</p>
+                        <h2>方向键 / WASD 控制</h2>
+                    </div>
+                    <p id="mode-hint" class="mode-hint">经典模式，撞墙结束。</p>
+                </div>
+
+                <div class="board-wrap">
+                    <canvas id="game-board" width="560" height="560" aria-label="贪吃蛇游戏画布"></canvas>
+                    <div id="overlay" class="overlay">
+                        <div class="overlay-card">
+                            <p id="overlay-kicker" class="overlay-kicker">准备就绪</p>
+                            <h3 id="overlay-title">按开始按钮或方向键进入游戏</h3>
+                            <p id="overlay-text" class="overlay-text">支持主题切换、穿墙模式、移动端按钮和自动继续。</p>
+                            <div class="overlay-actions">
+                                <button id="overlay-primary" class="button button-primary">开始游戏</button>
+                                <button id="overlay-secondary" class="button">重新开始</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mobile-pad" aria-label="移动端方向控制">
+                    <button class="pad-button" data-direction="up" aria-label="向上">↑</button>
+                    <div class="pad-row">
+                        <button class="pad-button" data-direction="left" aria-label="向左">←</button>
+                        <button class="pad-button" data-direction="down" aria-label="向下">↓</button>
+                        <button class="pad-button" data-direction="right" aria-label="向右">→</button>
+                    </div>
                 </div>
             </div>
-        </footer>
-    </div>
 
-    <script src="script.js?v=3"></script>
+            <aside class="side-panel">
+                <section class="card controls-card">
+                    <div class="panel-header compact">
+                        <div>
+                            <p class="panel-kicker">设置</p>
+                            <h2>即时生效</h2>
+                        </div>
+                    </div>
+
+                    <div class="control-grid">
+                        <label class="field">
+                            <span>主题</span>
+                            <select id="theme-select">
+                                <option value="dusk">暮色实验室</option>
+                                <option value="paper">纸面浅色</option>
+                                <option value="arcade">街机霓虹</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>棋盘尺寸</span>
+                            <select id="size-select">
+                                <option value="16">16 x 16</option>
+                                <option value="20">20 x 20</option>
+                                <option value="24" selected>24 x 24</option>
+                                <option value="28">28 x 28</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>边界规则</span>
+                            <select id="boundary-select">
+                                <option value="wall">撞墙结束</option>
+                                <option value="wrap">穿墙循环</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>游戏模式</span>
+                            <select id="mode-select">
+                                <option value="classic">经典</option>
+                                <option value="sprint">60 秒冲刺</option>
+                                <option value="zen">放松</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>蛇身配色</span>
+                            <select id="skin-select">
+                                <option value="mint">薄荷</option>
+                                <option value="ocean">海蓝</option>
+                                <option value="sunset">落日</option>
+                                <option value="plum">紫莓</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div class="control-row">
+                        <button id="sound-button" class="button">音效：开</button>
+                        <button id="clear-save-button" class="button">清除继续记录</button>
+                    </div>
+                </section>
+
+                <section class="card info-card">
+                    <div class="panel-header compact">
+                        <div>
+                            <p class="panel-kicker">说明</p>
+                            <h2>当前规则</h2>
+                        </div>
+                    </div>
+                    <ul class="info-list">
+                        <li>经典模式会逐步加速，适合正常游玩。</li>
+                        <li>60 秒冲刺以限时计分为主，速度提升更快。</li>
+                        <li>放松模式不会继续加速，适合测试颜色和手感。</li>
+                        <li>切换棋盘尺寸、模式或边界规则时会自动重开。</li>
+                    </ul>
+                    <p id="timer-label" class="timer-label">当前计时：不限时</p>
+                </section>
+
+                <section class="card records-card">
+                    <div class="panel-header compact">
+                        <div>
+                            <p class="panel-kicker">记录</p>
+                            <h2>本地最高分</h2>
+                        </div>
+                    </div>
+                    <ol id="records-list" class="records-list"></ol>
+                </section>
+            </aside>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
 </body>
 </html>
-
-
