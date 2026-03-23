@@ -1,35 +1,39 @@
-(() => {
-    const CANVAS_SIZE = 560;
+﻿(() => {
+    const CANVAS_SIZE = 640;
     const DEFAULT_SIZE = 24;
     const BASE_SPEEDS = {
         classic: 150,
         sprint: 125,
         zen: 170
     };
+    const SPEED_PRESETS = {
+        slow: 185,
+        normal: 155,
+        fast: 130
+    };
     const MODE_INFO = {
         classic: {
             hint: "经典模式，撞墙结束。",
-            timerLabel: "当前计时：不限时"
+            timer: "当前计时：不限时"
         },
         sprint: {
             hint: "60 秒冲刺，速度提升更快。",
-            timerLabel: "当前计时：60 秒倒计时"
+            timer: "当前计时：60 秒倒计时"
         },
         zen: {
-            hint: "放松模式，不会继续加速。",
-            timerLabel: "当前计时：不限时"
+            hint: "放松模式，不再继续加速。",
+            timer: "当前计时：不限时"
         }
     };
-    const SKINS = {
-        mint: { head: "#7cf4c5", body: "#31c48d" },
-        ocean: { head: "#7dd3fc", body: "#0ea5e9" },
-        sunset: { head: "#fbbf24", body: "#f97316" },
-        plum: { head: "#c4b5fd", body: "#8b5cf6" }
+    const OBSTACLE_INFO = {
+        none: "关闭",
+        spike: "尖刺碰撞即死",
+        trim: "毒果会缩短身体"
     };
     const STORAGE = {
-        settings: "snake-lab.settings",
-        records: "snake-lab.records",
-        snapshot: "snake-lab.snapshot"
+        settings: "snake-light.settings",
+        records: "snake-light.records",
+        snapshot: "snake-light.snapshot"
     };
 
     const canvas = document.getElementById("game-board");
@@ -53,11 +57,11 @@
     const overlaySecondary = document.getElementById("overlay-secondary");
     const soundButton = document.getElementById("sound-button");
     const clearSaveButton = document.getElementById("clear-save-button");
-    const themeSelect = document.getElementById("theme-select");
     const sizeSelect = document.getElementById("size-select");
     const boundarySelect = document.getElementById("boundary-select");
     const modeSelect = document.getElementById("mode-select");
-    const skinSelect = document.getElementById("skin-select");
+    const speedSelect = document.getElementById("speed-select");
+    const obstacleSelect = document.getElementById("obstacle-select");
     const padButtons = Array.from(document.querySelectorAll(".pad-button"));
 
     const settings = loadSettings();
@@ -65,16 +69,18 @@
         size: settings.size,
         boundary: settings.boundary,
         mode: settings.mode,
-        skin: settings.skin,
+        speedSetting: settings.speedSetting,
+        obstacleMode: settings.obstacleMode,
         soundEnabled: settings.soundEnabled,
         phase: "ready",
         snake: [],
         direction: { x: 1, y: 0 },
         queuedDirection: null,
         food: null,
+        obstacles: [],
+        foodsEaten: 0,
         score: 0,
         best: 0,
-        elapsedMs: 0,
         remainingMs: settings.mode === "sprint" ? 60000 : null,
         speedMs: BASE_SPEEDS[settings.mode],
         lastFrame: 0,
@@ -134,11 +140,11 @@
 
     function loadSettings() {
         const fallback = {
-            theme: "dusk",
             size: DEFAULT_SIZE,
             boundary: "wall",
             mode: "classic",
-            skin: "mint",
+            speedSetting: "normal",
+            obstacleMode: "none",
             soundEnabled: true
         };
         try {
@@ -147,11 +153,11 @@
                 return fallback;
             }
             return {
-                theme: typeof raw.theme === "string" ? raw.theme : fallback.theme,
                 size: Number.isInteger(raw.size) ? raw.size : fallback.size,
-                boundary: typeof raw.boundary === "string" ? raw.boundary : fallback.boundary,
-                mode: typeof raw.mode === "string" ? raw.mode : fallback.mode,
-                skin: typeof raw.skin === "string" ? raw.skin : fallback.skin,
+                boundary: raw.boundary === "wrap" ? "wrap" : fallback.boundary,
+                mode: raw.mode in BASE_SPEEDS ? raw.mode : fallback.mode,
+                speedSetting: raw.speedSetting in SPEED_PRESETS ? raw.speedSetting : fallback.speedSetting,
+                obstacleMode: raw.obstacleMode in OBSTACLE_INFO ? raw.obstacleMode : fallback.obstacleMode,
                 soundEnabled: typeof raw.soundEnabled === "boolean" ? raw.soundEnabled : fallback.soundEnabled
             };
         } catch {
@@ -160,17 +166,14 @@
     }
 
     function saveSettings() {
-        localStorage.setItem(
-            STORAGE.settings,
-            JSON.stringify({
-                theme: document.documentElement.dataset.theme || "dusk",
-                size: state.size,
-                boundary: state.boundary,
-                mode: state.mode,
-                skin: state.skin,
-                soundEnabled: state.soundEnabled
-            })
-        );
+        localStorage.setItem(STORAGE.settings, JSON.stringify({
+            size: state.size,
+            boundary: state.boundary,
+            mode: state.mode,
+            speedSetting: state.speedSetting,
+            obstacleMode: state.obstacleMode,
+            soundEnabled: state.soundEnabled
+        }));
     }
 
     function loadRecords() {
@@ -186,30 +189,45 @@
         localStorage.setItem(STORAGE.records, JSON.stringify(records.slice(0, 8)));
     }
 
-    function getBestScore() {
-        const best = loadRecords().reduce((max, item) => Math.max(max, item.score || 0), 0);
-        state.best = best;
-        return best;
-    }
-
     function renderRecords() {
         const records = loadRecords();
         recordsList.innerHTML = "";
         if (!records.length) {
             const empty = document.createElement("li");
-            empty.textContent = "还没有记录，先跑出第一局。";
+            empty.textContent = "还没有记录，先玩一局。";
             recordsList.appendChild(empty);
             bestValue.textContent = "0";
+            state.best = 0;
             return;
         }
+
         records.forEach((item) => {
-            const line = document.createElement("li");
+            const li = document.createElement("li");
             const date = new Date(item.date).toLocaleDateString("zh-CN");
-            const label = `${item.score} 分 · ${item.modeLabel} · ${item.size}x${item.size} · ${date}`;
-            line.textContent = label;
-            recordsList.appendChild(line);
+            li.textContent = `${item.score} 分 · ${item.modeLabel} · ${item.size}x${item.size} · ${date}`;
+            recordsList.appendChild(li);
         });
-        bestValue.textContent = String(getBestScore());
+
+        state.best = records.reduce((max, item) => Math.max(max, item.score || 0), 0);
+        bestValue.textContent = String(state.best);
+    }
+
+    function saveRecord() {
+        if (state.score <= 0) {
+            renderRecords();
+            return;
+        }
+        const records = loadRecords();
+        records.push({
+            score: state.score,
+            mode: state.mode,
+            modeLabel: modeSelect.options[modeSelect.selectedIndex].text,
+            size: state.size,
+            date: Date.now()
+        });
+        records.sort((a, b) => b.score - a.score);
+        saveRecords(records);
+        renderRecords();
     }
 
     function saveSnapshot() {
@@ -218,24 +236,24 @@
             refreshContinueButton();
             return;
         }
-        localStorage.setItem(
-            STORAGE.snapshot,
-            JSON.stringify({
-                size: state.size,
-                boundary: state.boundary,
-                mode: state.mode,
-                skin: state.skin,
-                score: state.score,
-                elapsedMs: state.elapsedMs,
-                remainingMs: state.remainingMs,
-                speedMs: state.speedMs,
-                phase: state.phase,
-                direction: state.direction,
-                queuedDirection: state.queuedDirection,
-                snake: state.snake,
-                food: state.food
-            })
-        );
+        localStorage.setItem(STORAGE.snapshot, JSON.stringify({
+            size: state.size,
+            boundary: state.boundary,
+            mode: state.mode,
+            speedSetting: state.speedSetting,
+            obstacleMode: state.obstacleMode,
+            soundEnabled: state.soundEnabled,
+            snake: state.snake,
+            direction: state.direction,
+            queuedDirection: state.queuedDirection,
+            food: state.food,
+            obstacles: state.obstacles,
+            foodsEaten: state.foodsEaten,
+            score: state.score,
+            remainingMs: state.remainingMs,
+            speedMs: state.speedMs,
+            phase: state.phase
+        }));
         refreshContinueButton();
     }
 
@@ -248,24 +266,21 @@
             state.size = Number.isInteger(raw.size) ? raw.size : DEFAULT_SIZE;
             state.boundary = raw.boundary === "wrap" ? "wrap" : "wall";
             state.mode = raw.mode in BASE_SPEEDS ? raw.mode : "classic";
-            state.skin = raw.skin in SKINS ? raw.skin : "mint";
+            state.speedSetting = raw.speedSetting in SPEED_PRESETS ? raw.speedSetting : settings.speedSetting;
+            state.obstacleMode = raw.obstacleMode in OBSTACLE_INFO ? raw.obstacleMode : "none";
+            state.soundEnabled = typeof raw.soundEnabled === "boolean" ? raw.soundEnabled : true;
+            state.snake = raw.snake;
+            state.direction = raw.direction || { x: 1, y: 0 };
+            state.queuedDirection = raw.queuedDirection || null;
+            state.food = raw.food;
+            state.obstacles = Array.isArray(raw.obstacles) ? raw.obstacles : [];
+            state.foodsEaten = Number.isFinite(raw.foodsEaten) ? raw.foodsEaten : 0;
             state.score = Number.isFinite(raw.score) ? raw.score : 0;
-            state.elapsedMs = Number.isFinite(raw.elapsedMs) ? raw.elapsedMs : 0;
             state.remainingMs = Number.isFinite(raw.remainingMs) ? raw.remainingMs : (state.mode === "sprint" ? 60000 : null);
             state.speedMs = Number.isFinite(raw.speedMs) ? raw.speedMs : BASE_SPEEDS[state.mode];
             state.phase = "paused";
-            state.direction = isDirection(raw.direction) ? raw.direction : { x: 1, y: 0 };
-            state.queuedDirection = isDirection(raw.queuedDirection) ? raw.queuedDirection : null;
-            state.snake = raw.snake.map((segment) => ({
-                x: Math.max(0, Math.min(state.size - 1, segment.x)),
-                y: Math.max(0, Math.min(state.size - 1, segment.y))
-            }));
-            state.food = {
-                x: Math.max(0, Math.min(state.size - 1, raw.food.x)),
-                y: Math.max(0, Math.min(state.size - 1, raw.food.y))
-            };
             syncControls();
-            refreshModeText();
+            refreshModeInfo();
             refreshPalette();
             updateHud();
             showOverlay("continue");
@@ -281,53 +296,55 @@
         refreshContinueButton();
     }
 
-    function isDirection(value) {
-        return value && Number.isFinite(value.x) && Number.isFinite(value.y);
-    }
-
-    function applyTheme(theme) {
-        const nextTheme = theme === "paper" || theme === "arcade" ? theme : "dusk";
-        document.documentElement.dataset.theme = nextTheme;
-        themeSelect.value = nextTheme;
-        refreshPalette();
-        saveSettings();
-        draw();
-    }
-
-    function refreshPalette() {
-        const rootStyle = getComputedStyle(document.documentElement);
-        palette.gridA = rootStyle.getPropertyValue("--grid-a").trim();
-        palette.gridB = rootStyle.getPropertyValue("--grid-b").trim();
-        palette.food = rootStyle.getPropertyValue("--food").trim();
-        palette.foodGlow = rootStyle.getPropertyValue("--food-glow").trim();
-        palette.text = rootStyle.getPropertyValue("--text").trim();
-        const skin = SKINS[state.skin] || SKINS.mint;
-        palette.snakeHead = skin.head;
-        palette.snakeBody = skin.body;
-    }
-
-    function refreshModeText() {
-        modeHint.textContent = MODE_INFO[state.mode].hint;
-        timerLabel.textContent = MODE_INFO[state.mode].timerLabel;
-    }
-
     function refreshContinueButton() {
         continueButton.disabled = !localStorage.getItem(STORAGE.snapshot);
     }
 
+    function refreshPalette() {
+        const styles = getComputedStyle(document.documentElement);
+        palette.gridA = styles.getPropertyValue("--grid-a").trim();
+        palette.gridB = styles.getPropertyValue("--grid-b").trim();
+        palette.food = styles.getPropertyValue("--food").trim();
+        palette.foodGlow = styles.getPropertyValue("--food-glow").trim();
+        palette.text = styles.getPropertyValue("--text").trim();
+        palette.snakeHead = styles.getPropertyValue("--snake-head").trim();
+        palette.snakeBody = styles.getPropertyValue("--snake-body").trim();
+    }
+
+    function getStartSpeedMs() {
+        if (state.mode === "zen") {
+            return SPEED_PRESETS.slow;
+        }
+        if (state.mode === "classic") {
+            return SPEED_PRESETS[state.speedSetting];
+        }
+        return BASE_SPEEDS.sprint;
+    }
+
     function syncControls() {
-        themeSelect.value = document.documentElement.dataset.theme || settings.theme;
         sizeSelect.value = String(state.size);
         boundarySelect.value = state.boundary;
         modeSelect.value = state.mode;
-        skinSelect.value = state.skin;
+        speedSelect.value = state.speedSetting;
+        speedSelect.disabled = state.mode !== "classic";
+        obstacleSelect.value = state.obstacleMode;
         soundButton.textContent = `音效：${state.soundEnabled ? "开" : "关"}`;
+    }
+
+    function refreshModeInfo() {
+        const speedHint = state.mode === "classic"
+            ? `速度：${speedSelect.options[speedSelect.selectedIndex].text}`
+            : state.mode === "zen"
+                ? "速度：固定为最慢"
+                : "速度：会逐步加快";
+        modeHint.textContent = `${MODE_INFO[state.mode].hint} · ${speedHint} · 障碍：${OBSTACLE_INFO[state.obstacleMode]}`;
+        timerLabel.textContent = MODE_INFO[state.mode].timer;
     }
 
     function updateHud() {
         scoreValue.textContent = String(state.score);
         bestValue.textContent = String(state.best);
-        speedValue.textContent = `${(BASE_SPEEDS.classic / state.speedMs).toFixed(1)}x`;
+        speedValue.textContent = `${(SPEED_PRESETS.normal / state.speedMs).toFixed(1)}x`;
         startButton.textContent = state.phase === "paused" ? "继续游戏" : "开始游戏";
         pauseButton.textContent = state.phase === "running" ? "暂停" : "继续";
 
@@ -354,11 +371,11 @@
 
     function showOverlay(type) {
         if (type === "ready") {
-            setOverlay(true, "准备就绪", "按开始按钮或方向键进入游戏", "切换主题和模式后会自动重开。移动端可直接使用下方方向按钮。", "开始游戏");
+            setOverlay(true, "准备就绪", "按开始按钮或方向键进入游戏", "游戏会自动保存当前对局，刷新页面后可以继续。", "开始游戏");
         } else if (type === "paused") {
-            setOverlay(true, "暂停中", "当前对局已暂停", "按继续按钮、空格键或任意方向键回到游戏。", "继续游戏");
+            setOverlay(true, "已暂停", "当前对局已暂停", "按继续按钮、空格键或方向键回到游戏。", "继续游戏");
         } else if (type === "continue") {
-            setOverlay(true, "发现继续记录", "可以从上次暂停位置接着玩", "已恢复棋盘、分数和速度，开始后会从暂停状态继续。", "继续游戏");
+            setOverlay(true, "继续对局", "可以从上次位置接着玩", "当前记录已经恢复到暂停状态。", "继续游戏");
         } else if (type === "over") {
             setOverlay(true, "游戏结束", `本局得分 ${state.score}`, "重新开始会保留设置，但会清空当前对局。", "再来一局");
         } else {
@@ -377,14 +394,22 @@
         state.direction = { x: 1, y: 0 };
         state.queuedDirection = null;
         state.food = null;
+        state.obstacles = [];
+        state.foodsEaten = 0;
         state.score = 0;
-        state.elapsedMs = 0;
         state.remainingMs = state.mode === "sprint" ? 60000 : null;
-        state.speedMs = BASE_SPEEDS[state.mode];
+        state.speedMs = getStartSpeedMs();
         state.phase = "ready";
         state.lastFrame = 0;
         state.accumulator = 0;
         placeFood();
+        if (state.obstacleMode !== "none") {
+            const initialObstacles = Math.max(2, Math.floor(state.size / 8));
+            for (let index = 0; index < initialObstacles; index += 1) {
+                placeObstacle();
+            }
+        }
+        refreshModeInfo();
         updateHud();
         showOverlay("ready");
         draw();
@@ -423,36 +448,20 @@
         updateHud();
         saveRecord();
         showOverlay("over");
-        audio.crash();
         if (reason === "time") {
-            overlayText.textContent = "时间到。可以调整模式或直接重新开始。";
+            overlayText.textContent = "时间到。可以直接重新开始，或者切换模式再来。";
         } else if (reason === "clear") {
             overlayText.textContent = "棋盘已经被你吃满了，这局算通关。";
+        } else if (reason === "obstacle") {
+            overlayText.textContent = state.obstacleMode === "trim"
+                ? "毒果把你的身体削得太短了，这局结束。"
+                : "撞到了随机尖刺，直接结束。";
         } else {
-            overlayText.textContent = "撞到了。可以试试穿墙模式，或者把棋盘调小一点。";
+            overlayText.textContent = "撞到了。可以试试穿墙模式，或者换个棋盘尺寸。";
         }
+        audio.crash();
         clearSnapshot();
         draw();
-    }
-
-    function saveRecord() {
-        if (state.score <= 0) {
-            renderRecords();
-            return;
-        }
-        const records = loadRecords();
-        records.push({
-            score: state.score,
-            mode: state.mode,
-            modeLabel: modeSelect.options[modeSelect.selectedIndex].text,
-            size: state.size,
-            date: Date.now()
-        });
-        records.sort((a, b) => b.score - a.score);
-        saveRecords(records);
-        state.best = getBestScore();
-        renderRecords();
-        updateHud();
     }
 
     function placeFood() {
@@ -461,12 +470,46 @@
                 x: Math.floor(Math.random() * state.size),
                 y: Math.floor(Math.random() * state.size)
             };
-            const collision = state.snake.some((segment) => segment.x === next.x && segment.y === next.y);
-            if (!collision) {
+            const occupied = state.snake.some((segment) => segment.x === next.x && segment.y === next.y)
+                || state.obstacles.some((obstacle) => obstacle.x === next.x && obstacle.y === next.y);
+            if (!occupied) {
                 state.food = next;
                 return;
             }
         }
+    }
+
+    function placeObstacle() {
+        if (state.obstacleMode === "none") {
+            return;
+        }
+        const maxObstacles = Math.max(3, Math.floor(state.size / 2));
+        if (state.obstacles.length >= maxObstacles) {
+            return;
+        }
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+            const next = {
+                x: Math.floor(Math.random() * state.size),
+                y: Math.floor(Math.random() * state.size)
+            };
+            const occupied = state.snake.some((segment) => segment.x === next.x && segment.y === next.y)
+                || (state.food && state.food.x === next.x && state.food.y === next.y)
+                || state.obstacles.some((obstacle) => obstacle.x === next.x && obstacle.y === next.y);
+            if (!occupied) {
+                state.obstacles.push(next);
+                return;
+            }
+        }
+    }
+
+    function trimSnake() {
+        if (state.snake.length <= 4) {
+            endGame("obstacle");
+            return false;
+        }
+        state.snake.splice(-2, 2);
+        state.score = Math.max(0, state.score - 8);
+        return true;
     }
 
     function queueDirection(nextDirection) {
@@ -490,21 +533,16 @@
 
     function stepGame() {
         applyQueuedDirection();
-        const currentHead = state.snake[0];
+        const head = state.snake[0];
         const nextHead = {
-            x: currentHead.x + state.direction.x,
-            y: currentHead.y + state.direction.y
+            x: head.x + state.direction.x,
+            y: head.y + state.direction.y
         };
 
         if (state.boundary === "wrap") {
             nextHead.x = (nextHead.x + state.size) % state.size;
             nextHead.y = (nextHead.y + state.size) % state.size;
-        } else if (
-            nextHead.x < 0 ||
-            nextHead.x >= state.size ||
-            nextHead.y < 0 ||
-            nextHead.y >= state.size
-        ) {
+        } else if (nextHead.x < 0 || nextHead.x >= state.size || nextHead.y < 0 || nextHead.y >= state.size) {
             endGame("wall");
             return;
         }
@@ -516,21 +554,39 @@
             }
             return segment.x === nextHead.x && segment.y === nextHead.y;
         });
+        const hitObstacle = state.obstacles.find((obstacle) => obstacle.x === nextHead.x && obstacle.y === nextHead.y);
 
         if (hitsSelf) {
             endGame("self");
             return;
         }
+        if (hitObstacle && state.obstacleMode === "spike") {
+            endGame("obstacle");
+            return;
+        }
 
         state.snake.unshift(nextHead);
 
+        if (hitObstacle && state.obstacleMode === "trim") {
+            state.obstacles = state.obstacles.filter((obstacle) => obstacle !== hitObstacle);
+            if (!trimSnake()) {
+                return;
+            }
+        }
+
         if (state.food && nextHead.x === state.food.x && nextHead.y === state.food.y) {
             state.score += state.mode === "sprint" ? 15 : 10;
-            if (state.mode !== "zen") {
-                state.speedMs = Math.max(70, state.speedMs - (state.mode === "sprint" ? 6 : 4));
+            state.foodsEaten += 1;
+            if (state.mode === "classic") {
+                state.speedMs = Math.max(96, state.speedMs - 3);
+            } else if (state.mode === "sprint") {
+                state.speedMs = Math.max(74, state.speedMs - 6);
             }
             audio.eat();
             placeFood();
+            if (state.obstacleMode !== "none" && state.foodsEaten % 2 === 0) {
+                placeObstacle();
+            }
         } else {
             state.snake.pop();
         }
@@ -540,7 +596,6 @@
             return;
         }
 
-        state.elapsedMs += state.speedMs;
         updateHud();
         saveSnapshot();
     }
@@ -557,9 +612,9 @@
             ctx.beginPath();
             ctx.roundRect(left, top, width, height, radius);
             ctx.fill();
-            return;
+        } else {
+            ctx.fillRect(left, top, width, height);
         }
-        ctx.fillRect(left, top, width, height);
     }
 
     function drawBoard() {
@@ -572,25 +627,183 @@
                 ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
             }
         }
-
-        ctx.strokeStyle = "rgba(255,255,255,0.04)";
-        ctx.lineWidth = 1;
-        for (let i = 0; i <= state.size; i += 1) {
-            const offset = i * cellSize;
-            ctx.beginPath();
-            ctx.moveTo(offset, 0);
-            ctx.lineTo(offset, CANVAS_SIZE);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(0, offset);
-            ctx.lineTo(CANVAS_SIZE, offset);
-            ctx.stroke();
-        }
     }
 
     function drawSnake() {
+        const cellSize = CANVAS_SIZE / state.size;
+
+        if (state.snake.length > 1) {
+            ctx.strokeStyle = palette.snakeBody;
+            ctx.lineWidth = cellSize * 0.44;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            for (let index = 0; index < state.snake.length - 1; index += 1) {
+                const current = state.snake[index];
+                const next = state.snake[index + 1];
+                const currentX = current.x * cellSize + cellSize / 2;
+                const currentY = current.y * cellSize + cellSize / 2;
+                const nextX = next.x * cellSize + cellSize / 2;
+                const nextY = next.y * cellSize + cellSize / 2;
+                const deltaX = next.x - current.x;
+                const deltaY = next.y - current.y;
+                const isWrappedHorizontal = state.boundary === "wrap" && Math.abs(deltaX) === state.size - 1 && deltaY === 0;
+                const isWrappedVertical = state.boundary === "wrap" && Math.abs(deltaY) === state.size - 1 && deltaX === 0;
+                const isAdjacent = Math.abs(deltaX) + Math.abs(deltaY) === 1;
+
+                if (isAdjacent) {
+                    ctx.beginPath();
+                    ctx.moveTo(currentX, currentY);
+                    ctx.lineTo(nextX, nextY);
+                    ctx.stroke();
+                    continue;
+                }
+
+                if (isWrappedHorizontal) {
+                    const direction = deltaX > 0 ? 1 : -1;
+                    ctx.beginPath();
+                    ctx.moveTo(currentX, currentY);
+                    ctx.lineTo(direction > 0 ? CANVAS_SIZE : 0, currentY);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(direction > 0 ? 0 : CANVAS_SIZE, nextY);
+                    ctx.lineTo(nextX, nextY);
+                    ctx.stroke();
+                    continue;
+                }
+
+                if (isWrappedVertical) {
+                    const direction = deltaY > 0 ? 1 : -1;
+                    ctx.beginPath();
+                    ctx.moveTo(currentX, currentY);
+                    ctx.lineTo(currentX, direction > 0 ? CANVAS_SIZE : 0);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(nextX, direction > 0 ? 0 : CANVAS_SIZE);
+                    ctx.lineTo(nextX, nextY);
+                    ctx.stroke();
+                }
+            }
+        }
+
         state.snake.forEach((segment, index) => {
-            drawRoundedCell(segment.x, segment.y, index === 0 ? palette.snakeHead : palette.snakeBody, 2.5, 8);
+            const centerX = segment.x * cellSize + cellSize / 2;
+            const centerY = segment.y * cellSize + cellSize / 2;
+            const isHead = index === 0;
+            const isTail = index === state.snake.length - 1;
+            const radius = isHead ? cellSize * 0.34 : isTail ? cellSize * 0.18 : cellSize * 0.24;
+
+            ctx.fillStyle = isHead ? palette.snakeHead : palette.snakeBody;
+            ctx.beginPath();
+            if (isHead) {
+                ctx.ellipse(centerX, centerY, radius * 1.18, radius, 0, 0, Math.PI * 2);
+            } else if (isTail) {
+                ctx.ellipse(centerX, centerY, radius * 0.8, radius * 0.72, 0, 0, Math.PI * 2);
+            } else {
+                ctx.ellipse(centerX, centerY, radius, radius * 0.9, 0, 0, Math.PI * 2);
+            }
+            ctx.fill();
+
+            if (!isHead) {
+                ctx.fillStyle = "rgba(243, 251, 226, 0.92)";
+                ctx.beginPath();
+                ctx.ellipse(centerX, centerY + cellSize * 0.03, radius * 0.48, radius * 0.28, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        });
+
+        const head = state.snake[0];
+        if (!head) {
+            return;
+        }
+
+        const headCenterX = head.x * cellSize + cellSize / 2;
+        const headCenterY = head.y * cellSize + cellSize / 2;
+        const eyeOffsetX = state.direction.x === 0 ? cellSize * 0.14 : cellSize * 0.1;
+        const eyeOffsetY = state.direction.y === 0 ? cellSize * 0.12 : cellSize * 0.06;
+
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(headCenterX - eyeOffsetX, headCenterY - eyeOffsetY, cellSize * 0.075, 0, Math.PI * 2);
+        ctx.arc(headCenterX + eyeOffsetX, headCenterY - eyeOffsetY, cellSize * 0.075, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#172033";
+        ctx.beginPath();
+        ctx.arc(headCenterX - eyeOffsetX, headCenterY - eyeOffsetY, cellSize * 0.036, 0, Math.PI * 2);
+        ctx.arc(headCenterX + eyeOffsetX, headCenterY - eyeOffsetY, cellSize * 0.036, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(23, 32, 51, 0.5)";
+        ctx.lineWidth = Math.max(1.5, cellSize * 0.02);
+        ctx.beginPath();
+        ctx.arc(headCenterX, headCenterY + cellSize * 0.04, cellSize * 0.11, 0.15 * Math.PI, 0.85 * Math.PI);
+        ctx.stroke();
+
+        ctx.strokeStyle = "#ef476f";
+        ctx.lineWidth = Math.max(2, cellSize * 0.04);
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(headCenterX + state.direction.x * cellSize * 0.18, headCenterY + state.direction.y * cellSize * 0.18);
+        ctx.lineTo(headCenterX + state.direction.x * cellSize * 0.28, headCenterY + state.direction.y * cellSize * 0.28);
+        ctx.lineTo(
+            headCenterX + state.direction.x * cellSize * 0.36 + state.direction.y * cellSize * 0.06,
+            headCenterY + state.direction.y * cellSize * 0.36 + state.direction.x * cellSize * 0.06
+        );
+        ctx.moveTo(headCenterX + state.direction.x * cellSize * 0.28, headCenterY + state.direction.y * cellSize * 0.28);
+        ctx.lineTo(
+            headCenterX + state.direction.x * cellSize * 0.36 - state.direction.y * cellSize * 0.06,
+            headCenterY + state.direction.y * cellSize * 0.36 - state.direction.x * cellSize * 0.06
+        );
+        ctx.stroke();
+    }
+
+    function drawObstacles() {
+        if (state.obstacleMode === "none") {
+            return;
+        }
+
+        const cellSize = CANVAS_SIZE / state.size;
+        state.obstacles.forEach((obstacle) => {
+            const x = obstacle.x * cellSize;
+            const y = obstacle.y * cellSize;
+            const centerX = x + cellSize / 2;
+            const centerY = y + cellSize / 2;
+
+            if (state.obstacleMode === "spike") {
+                ctx.fillStyle = "#64748b";
+                ctx.beginPath();
+                ctx.moveTo(centerX, y + cellSize * 0.16);
+                ctx.lineTo(x + cellSize * 0.22, y + cellSize * 0.8);
+                ctx.lineTo(x + cellSize * 0.78, y + cellSize * 0.8);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = "#cbd5e1";
+                ctx.beginPath();
+                ctx.moveTo(centerX, y + cellSize * 0.3);
+                ctx.lineTo(x + cellSize * 0.38, y + cellSize * 0.72);
+                ctx.lineTo(x + cellSize * 0.62, y + cellSize * 0.72);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                ctx.fillStyle = "#a855f7";
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, cellSize * 0.19, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = "#7e22ce";
+                ctx.lineWidth = Math.max(2, cellSize * 0.04);
+                ctx.beginPath();
+                ctx.moveTo(centerX, y + cellSize * 0.16);
+                ctx.lineTo(centerX, y + cellSize * 0.84);
+                ctx.moveTo(x + cellSize * 0.16, centerY);
+                ctx.lineTo(x + cellSize * 0.84, centerY);
+                ctx.moveTo(x + cellSize * 0.25, y + cellSize * 0.25);
+                ctx.lineTo(x + cellSize * 0.75, y + cellSize * 0.75);
+                ctx.moveTo(x + cellSize * 0.75, y + cellSize * 0.25);
+                ctx.lineTo(x + cellSize * 0.25, y + cellSize * 0.75);
+                ctx.stroke();
+            }
         });
     }
 
@@ -604,9 +817,9 @@
         const radius = Math.max(5, cellSize * 0.24);
 
         ctx.save();
+        ctx.fillStyle = palette.food;
         ctx.shadowBlur = 18;
         ctx.shadowColor = palette.foodGlow;
-        ctx.fillStyle = palette.food;
         ctx.beginPath();
         ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
         ctx.fill();
@@ -620,15 +833,16 @@
 
         if (state.mode === "sprint" && Number.isFinite(state.remainingMs)) {
             const seconds = Math.max(0, Math.ceil(state.remainingMs / 1000));
-            ctx.fillText(`倒计时 ${seconds}s`, CANVAS_SIZE - 110, 24);
+            ctx.fillText(`倒计时 ${seconds}s`, CANVAS_SIZE - 116, 24);
         } else {
-            ctx.fillText(`${state.size}x${state.size}`, CANVAS_SIZE - 72, 24);
+            ctx.fillText(`${state.size}x${state.size}`, CANVAS_SIZE - 82, 24);
         }
     }
 
     function draw() {
         drawBoard();
         drawFood();
+        drawObstacles();
         drawSnake();
         drawMeta();
     }
@@ -640,11 +854,10 @@
             left: { x: -1, y: 0 },
             right: { x: 1, y: 0 }
         };
-        const direction = mapping[name];
-        if (!direction) {
+        if (!mapping[name]) {
             return;
         }
-        queueDirection(direction);
+        queueDirection(mapping[name]);
         if (state.phase === "ready" || state.phase === "paused") {
             startGame();
         }
@@ -676,17 +889,13 @@
         }
     }
 
-    function handlePadClick(event) {
-        handleDirectionInput(event.currentTarget.dataset.direction);
-    }
-
     function handleSettingChange() {
         state.size = Number(sizeSelect.value);
         state.boundary = boundarySelect.value;
         state.mode = modeSelect.value;
-        state.skin = skinSelect.value;
-        refreshModeText();
-        refreshPalette();
+        state.speedSetting = speedSelect.value;
+        state.obstacleMode = obstacleSelect.value;
+        speedSelect.disabled = state.mode !== "classic";
         saveSettings();
         restartGame();
     }
@@ -706,10 +915,12 @@
                     endGame("time");
                 }
             }
+
             while (state.phase === "running" && state.accumulator >= state.speedMs) {
                 state.accumulator -= state.speedMs;
                 stepGame();
             }
+
             updateHud();
             draw();
         }
@@ -743,12 +954,13 @@
             }
         });
         clearSaveButton.addEventListener("click", clearSnapshot);
-        themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
         sizeSelect.addEventListener("change", handleSettingChange);
         boundarySelect.addEventListener("change", handleSettingChange);
         modeSelect.addEventListener("change", handleSettingChange);
-        skinSelect.addEventListener("change", handleSettingChange);
-        padButtons.forEach((button) => button.addEventListener("click", handlePadClick));
+        obstacleSelect.addEventListener("change", handleSettingChange);
+        padButtons.forEach((button) => {
+            button.addEventListener("click", () => handleDirectionInput(button.dataset.direction));
+        });
         window.addEventListener("keydown", handleKeyDown);
         document.addEventListener("visibilitychange", () => {
             if (document.hidden && state.phase === "running") {
@@ -761,14 +973,11 @@
     function boot() {
         canvas.width = CANVAS_SIZE;
         canvas.height = CANVAS_SIZE;
-
-        document.documentElement.dataset.theme = settings.theme;
-        state.best = getBestScore();
         syncControls();
-        refreshModeText();
         refreshPalette();
         renderRecords();
         refreshContinueButton();
+        refreshModeInfo();
         bindEvents();
 
         if (!loadSnapshot()) {
@@ -782,4 +991,3 @@
 
     boot();
 })();
-

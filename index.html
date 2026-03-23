@@ -1,63 +1,42 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snake Lab</title>
+    <title>贪吃蛇</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <main class="app-shell">
-        <section class="hero card">
-            <div>
-                <p class="eyebrow">Snake Lab</p>
-                <h1>重做版贪吃蛇</h1>
-                <p class="hero-copy">修掉原来的开始、颜色和交互问题，保留轻量、直接、好上手的单页体验。</p>
-            </div>
-            <div class="hero-actions">
-                <button id="start-button" class="button button-primary">开始游戏</button>
-                <button id="pause-button" class="button">暂停</button>
-                <button id="restart-button" class="button">重新开始</button>
-                <button id="continue-button" class="button">继续上次</button>
-            </div>
-        </section>
-
-        <section class="stats-grid">
-            <article class="stat-card card">
-                <span class="stat-label">分数</span>
-                <strong id="score-value" class="stat-value">0</strong>
-            </article>
-            <article class="stat-card card">
-                <span class="stat-label">最高分</span>
-                <strong id="best-value" class="stat-value">0</strong>
-            </article>
-            <article class="stat-card card">
-                <span class="stat-label">速度</span>
-                <strong id="speed-value" class="stat-value">1.0x</strong>
-            </article>
-            <article class="stat-card card">
-                <span class="stat-label">状态</span>
-                <strong id="status-value" class="stat-value">待开始</strong>
-            </article>
-        </section>
-
         <section class="workspace">
-            <div class="board-panel card">
-                <div class="panel-header">
+            <section class="board-panel card">
+                <div class="board-top">
+                    <div class="brand">
+                        <p class="eyebrow">Snake</p>
+                        <h1>贪吃蛇</h1>
+                    </div>
+                    <div class="topbar-actions">
+                        <button id="start-button" class="button button-primary">开始游戏</button>
+                        <button id="pause-button" class="button">暂停</button>
+                        <button id="restart-button" class="button">重新开始</button>
+                        <button id="continue-button" class="button">继续上次</button>
+                    </div>
+                </div>
+
+                <div class="board-header">
                     <div>
-                        <p class="panel-kicker">游戏区</p>
-                        <h2>方向键 / WASD 控制</h2>
+                        <p class="eyebrow">游戏区</p>
                     </div>
                     <p id="mode-hint" class="mode-hint">经典模式，撞墙结束。</p>
                 </div>
 
-                <div class="board-wrap">
-                    <canvas id="game-board" width="560" height="560" aria-label="贪吃蛇游戏画布"></canvas>
+                <div id="board-stage" class="board-stage">
+                    <canvas id="game-board" width="640" height="640" aria-label="贪吃蛇游戏画布"></canvas>
                     <div id="overlay" class="overlay">
                         <div class="overlay-card">
-                            <p id="overlay-kicker" class="overlay-kicker">准备就绪</p>
+                            <p id="overlay-kicker" class="eyebrow">准备就绪</p>
                             <h3 id="overlay-title">按开始按钮或方向键进入游戏</h3>
-                            <p id="overlay-text" class="overlay-text">支持主题切换、穿墙模式、移动端按钮和自动继续。</p>
+                            <p id="overlay-text" class="overlay-text">游戏会自动保存当前对局，刷新页面后可以继续。</p>
                             <div class="overlay-actions">
                                 <button id="overlay-primary" class="button button-primary">开始游戏</button>
                                 <button id="overlay-secondary" class="button">重新开始</button>
@@ -66,7 +45,7 @@
                     </div>
                 </div>
 
-                <div class="mobile-pad" aria-label="移动端方向控制">
+                <div class="mobile-pad" aria-label="方向控制">
                     <button class="pad-button" data-direction="up" aria-label="向上">↑</button>
                     <div class="pad-row">
                         <button class="pad-button" data-direction="left" aria-label="向左">←</button>
@@ -74,26 +53,39 @@
                         <button class="pad-button" data-direction="right" aria-label="向右">→</button>
                     </div>
                 </div>
-            </div>
+            </section>
 
             <aside class="side-panel">
+                <section class="card stats-card">
+                    <div class="stats-grid">
+                        <article class="stat-item">
+                            <span class="stat-label">分数</span>
+                            <strong id="score-value" class="stat-value">0</strong>
+                        </article>
+                        <article class="stat-item">
+                            <span class="stat-label">最高分</span>
+                            <strong id="best-value" class="stat-value">0</strong>
+                        </article>
+                        <article class="stat-item">
+                            <span class="stat-label">速度</span>
+                            <strong id="speed-value" class="stat-value">1.0x</strong>
+                        </article>
+                        <article class="stat-item">
+                            <span class="stat-label">状态</span>
+                            <strong id="status-value" class="stat-value">待开始</strong>
+                        </article>
+                    </div>
+                </section>
+
                 <section class="card controls-card">
-                    <div class="panel-header compact">
+                    <div class="panel-title-row">
                         <div>
-                            <p class="panel-kicker">设置</p>
-                            <h2>即时生效</h2>
+                            <p class="eyebrow">设置</p>
+                            <h2>对局参数</h2>
                         </div>
                     </div>
 
                     <div class="control-grid">
-                        <label class="field">
-                            <span>主题</span>
-                            <select id="theme-select">
-                                <option value="dusk">暮色实验室</option>
-                                <option value="paper">纸面浅色</option>
-                                <option value="arcade">街机霓虹</option>
-                            </select>
-                        </label>
                         <label class="field">
                             <span>棋盘尺寸</span>
                             <select id="size-select">
@@ -110,51 +102,47 @@
                                 <option value="wrap">穿墙循环</option>
                             </select>
                         </label>
-                        <label class="field">
+                        <label class="field field-wide">
                             <span>游戏模式</span>
                             <select id="mode-select">
                                 <option value="classic">经典</option>
                                 <option value="sprint">60 秒冲刺</option>
-                                <option value="zen">放松</option>
+                                <option value="zen">放松模式</option>
                             </select>
                         </label>
-                        <label class="field">
-                            <span>蛇身配色</span>
-                            <select id="skin-select">
-                                <option value="mint">薄荷</option>
-                                <option value="ocean">海蓝</option>
-                                <option value="sunset">落日</option>
-                                <option value="plum">紫莓</option>
+                        <label class="field field-wide">
+                            <span>起始速度</span>
+                            <select id="speed-select">
+                                <option value="slow">慢</option>
+                                <option value="normal" selected>标准</option>
+                                <option value="fast">快</option>
+                            </select>
+                        </label>
+                        <label class="field field-wide">
+                            <span>随机障碍</span>
+                            <select id="obstacle-select">
+                                <option value="none">关闭</option>
+                                <option value="spike">尖刺：碰到直接结束</option>
+                                <option value="trim">毒果：碰到会缩短身体</option>
                             </select>
                         </label>
                     </div>
 
-                    <div class="control-row">
+                    <div class="control-actions">
                         <button id="sound-button" class="button">音效：开</button>
                         <button id="clear-save-button" class="button">清除继续记录</button>
                     </div>
-                </section>
 
-                <section class="card info-card">
-                    <div class="panel-header compact">
-                        <div>
-                            <p class="panel-kicker">说明</p>
-                            <h2>当前规则</h2>
-                        </div>
+                    <div class="helper-lines">
+                        <p id="timer-label">当前计时：不限时</p>
+                        <p>切换尺寸、规则或模式时会自动重开。</p>
                     </div>
-                    <ul class="info-list">
-                        <li>经典模式会逐步加速，适合正常游玩。</li>
-                        <li>60 秒冲刺以限时计分为主，速度提升更快。</li>
-                        <li>放松模式不会继续加速，适合测试颜色和手感。</li>
-                        <li>切换棋盘尺寸、模式或边界规则时会自动重开。</li>
-                    </ul>
-                    <p id="timer-label" class="timer-label">当前计时：不限时</p>
                 </section>
 
                 <section class="card records-card">
-                    <div class="panel-header compact">
+                    <div class="panel-title-row">
                         <div>
-                            <p class="panel-kicker">记录</p>
+                            <p class="eyebrow">记录</p>
                             <h2>本地最高分</h2>
                         </div>
                     </div>
